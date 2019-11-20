@@ -1,4 +1,4 @@
-a#include <RcppArmadillo.h> 
+#include <RcppArmadillo.h> 
 #include <Rcpp.h>
 
 // [[Rcpp::depends(RcppArmadillo)]]
