@@ -1,13 +1,14 @@
 #Gwishart random effect cov
 #dimFTcoef--indicator whether there are covariates for the survival part
 
-Rcpp::sourceCpp("~/Dropbox/research/Active/Dipankar/Analysis/Data/BP/Ht/MCMC_BP_multivariateRE.cpp")
+Rcpp::sourceCpp("MCMC_BP_multivariateRE.cpp")
 
 produ<-function(x,beta){
   if(length(beta)>1){return(x%*%beta)}
   else{return(x*beta)}
 }
-mcmc<-function(model,distr,maxc,t1,t2,type,m,d_r,BP,SR,crx,FTx,dimFTcoef,Randomx,nrun,nskip,nskip_r,nburn,nburn_r,Jw,a_alpha,b_alpha,th_initial){
+mcmc<-function(model,distr,maxc,t1,t2,type,m,d_r,BP,SR,crx,FTx,dimFTcoef,Randomx,
+               nrun,nskip,nskip_r,nburn,nburn_r,Jw,a_alpha,b_alpha,th_initial){
   if(is.vector(crx)){pcr = 1}
   else{pcr = length(crx[1,])}
   if(is.vector(FTx)){pFT = 1}
@@ -182,13 +183,12 @@ mcmc<-function(model,distr,maxc,t1,t2,type,m,d_r,BP,SR,crx,FTx,dimFTcoef,Randomx
     
     #cru_o = cru_o-mean(cru_o) #mean constraint
     crv_o = matrixproduct( Randomx, cru_o, n, m, d_r);Fv_o = phi_o*crv_o;
-    missingM =  missing_impute_t( model, BP, distr,maxc,t1, t2,type, th_o[1], th_o[2], weight_o, FXbeta_o,Fv_o,crXbeta_o,crv_o)
     
     #update theta
-    likelihood_o = likelihoodv(model, BP,m, t1, t2, type, th_o[1], th_o[2], weight_o, distr, FXbeta_o, Fv_o, crXbeta_o, crv_o, missingM) 
+    likelihood_o = likelihoodv(model, BP,m, t1, t2, type, th_o[1], th_o[2], weight_o, distr, FXbeta_o, Fv_o, crXbeta_o, crv_o) 
     prior_th_o = log_dnorm (th_o, pmean_th, pcov_th,2)
     th_n = rmnorm(th_o,cov_th)
-    likelihood_n = likelihoodv(model, BP,m, t1, t2, type, th_n[1], th_n[2], weight_o, distr, FXbeta_o, Fv_o, crXbeta_o, crv_o, missingM) 
+    likelihood_n = likelihoodv(model, BP,m, t1, t2, type, th_n[1], th_n[2], weight_o, distr, FXbeta_o, Fv_o, crXbeta_o, crv_o) 
     prior_th_n = log_dnorm (th_n, pmean_th, pcov_th,2)
     
     if(log(runif(1))<(sum(likelihood_n)+prior_th_n-sum(likelihood_o)-prior_th_o)){
@@ -204,7 +204,7 @@ mcmc<-function(model,distr,maxc,t1,t2,type,m,d_r,BP,SR,crx,FTx,dimFTcoef,Randomx
       prior_weight_o = alpha_o*sum(log(weight_o))
       bz_n = rmnorm(bz_o,cov_bz)
       z_n = bz_n;weight_n = Ys_to_weight(z_n)
-      likelihood_n = likelihoodv(model, BP,m, t1, t2, type, th_c[1], th_c[2], weight_n, distr, FXbeta_o, Fv_o, crXbeta_o, crv_o, missingM) 
+      likelihood_n = likelihoodv(model, BP,m, t1, t2, type, th_c[1], th_c[2], weight_n, distr, FXbeta_o, Fv_o, crXbeta_o, crv_o) 
       prior_weight_n = alpha_o*sum(log(weight_n))
       
       if(log(runif(1))<(sum(likelihood_n)+prior_weight_n-sum(likelihood_o)-prior_weight_o)){
@@ -237,7 +237,7 @@ mcmc<-function(model,distr,maxc,t1,t2,type,m,d_r,BP,SR,crx,FTx,dimFTcoef,Randomx
     if(pcr>1){crcoef_n = rmnorm(crcoef_o,cov_crcoef)}
     else{crcoef_n = rnorm(1,crcoef_o,sqrt(cov_crcoef))}
     crXbeta_n = produ(crx,crcoef_n)
-    likelihood_n = likelihoodv(model, BP,m, t1, t2, type, th_c[1], th_c[2], weight_c, distr, FXbeta_o, Fv_o, crXbeta_n, crv_o, missingM) 
+    likelihood_n = likelihoodv(model, BP,m, t1, t2, type, th_c[1], th_c[2], weight_c, distr, FXbeta_o, Fv_o, crXbeta_n, crv_o) 
     prior_crcoef_n = -t(crcoef_n)%*%(crcoef_n)/3^2/2
     
     if(log(runif(1))<(sum(likelihood_n)+prior_crcoef_n[1]-sum(likelihood_o)-prior_crcoef_o[1])){
@@ -254,7 +254,7 @@ mcmc<-function(model,distr,maxc,t1,t2,type,m,d_r,BP,SR,crx,FTx,dimFTcoef,Randomx
       if(pFT>1){FTcoef_n = rmnorm(FTcoef_o,cov_FTcoef)}
       else{FTcoef_n = rnorm(1,FTcoef_o,sqrt(cov_FTcoef))}
       FXbeta_n = produ(FTx,FTcoef_n)
-      likelihood_n = likelihoodv(model, BP,m, t1, t2, type, th_c[1], th_c[2], weight_c, distr, FXbeta_n, Fv_o, crXbeta_c, crv_o, missingM) 
+      likelihood_n = likelihoodv(model, BP,m, t1, t2, type, th_c[1], th_c[2], weight_c, distr, FXbeta_n, Fv_o, crXbeta_c, crv_o) 
       prior_FTcoef_n = -t(FTcoef_n)%*%(FTcoef_n)/10^2/2
       
       if(log(runif(1))<(sum(likelihood_n)+prior_FTcoef_n-sum(likelihood_o)-prior_FTcoef_o)){
@@ -278,7 +278,7 @@ mcmc<-function(model,distr,maxc,t1,t2,type,m,d_r,BP,SR,crx,FTx,dimFTcoef,Randomx
     
     FTw_n = temp[,1]; cru_n = temp[,2]
     crv_n = matrixproduct( Randomx, cru_n, n, m, d_r);Fv_n = phi_o*crv_n;
-    likelihood_n = likelihoodv(model, BP,m, t1, t2, type, th_c[1], th_c[2], weight_c, distr, FXbeta_c, Fv_n, crXbeta_c, crv_n, missingM) 
+    likelihood_n = likelihoodv(model, BP,m, t1, t2, type, th_c[1], th_c[2], weight_c, distr, FXbeta_c, Fv_n, crXbeta_c, crv_n) 
     
     tempmatrix=randomeffect (cru_o,cru_n,likelihood_o,likelihood_n,invsigmastar,n,m,d_r)
     randomeffect_c=tempmatrix[1:d_r,]
@@ -308,8 +308,8 @@ mcmc<-function(model,distr,maxc,t1,t2,type,m,d_r,BP,SR,crx,FTx,dimFTcoef,Randomx
     Fv_c = phi_n*crv_c;
     prior_phi_o = -phi_o^2/2/9
     prior_phi_n = -phi_n^2/2/9
-    likelihood_o = likelihoodv(model, BP,m, t1, t2, type, th_c[1], th_c[2], weight_c, distr, FXbeta_c, Fv_oc, crXbeta_c, crv_c, missingM) 
-    likelihood_n = likelihoodv(model, BP,m, t1, t2, type, th_c[1], th_c[2], weight_c, distr, FXbeta_c, Fv_c, crXbeta_c, crv_c, missingM)
+    likelihood_o = likelihoodv(model, BP,m, t1, t2, type, th_c[1], th_c[2], weight_c, distr, FXbeta_c, Fv_oc, crXbeta_c, crv_c) 
+    likelihood_n = likelihoodv(model, BP,m, t1, t2, type, th_c[1], th_c[2], weight_c, distr, FXbeta_c, Fv_c, crXbeta_c, crv_c)
     if(log(runif(1))<(sum(likelihood_n)+prior_phi_n-sum(likelihood_o)-prior_phi_o)){
       phi_c = phi_n;acceptance[n+6] = acceptance[n+6]+1;likelihood_s=likelihood_n
     }

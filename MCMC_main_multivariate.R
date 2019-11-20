@@ -3,7 +3,7 @@ source('MCMC_BP_multivariateRE.R')
 
 #---------------------------------------------------------------------------------------------------#
 # Model setup
-n = 100;m = 14;d_r = 2; model = "AFT";distr=1;BP=1
+n = 10;m = 20;d_r = 2; model = "AFT";distr=1;BP=1
 crcoef_s = c(-1,0.2);pcr = 2;FTcoef_s = c(0.5,-0.5);pFT=2;phi_s = 0.3
 #    n---number of individuals under study.
 #    m---number of units within each individual.
@@ -30,7 +30,7 @@ Randomx[,2] = rnorm(n*m,0,1)
 #    crx---covariates in the model for cure rate
 #    FTx---covariates in the survival model for the latent distribution
 
-
+sigmau = cbind(c(0.5,0),c(0,0.5))
 
 
 cru_s = rep(0,n*d_r);FTw_s = rep(0,n*d_r)
@@ -48,16 +48,14 @@ type=rep(0,n*m)
 ind = 1;t1=rep(0,n*m);t2=rep(0,n*m);censortu=NULL;censortl=NULL
 for(i in 1:(n*m)){
   censortu[i] = 20
-  censortl[i] = rexp(1,1)/10
-  if(runif(1)<0.001){type[i]=5}
-  else{
-    if(nt[i]<censortl[i]){type[i]=2;t2[i]=censortl[i]}
-    if(nt[i]>censortu[i]){type[i]=3;t1[i]=censortu[i]}
+  censortl[i] = rexp(1,1)
+    if(nt[i]<censortl[i]){type[i]=2;t1[i] = censortl[i]; t2[i]=censortl[i]}
+    if(nt[i]>censortu[i]){type[i]=3;t1[i]=censortu[i]; t2[i] = censortu[i]}
     if(nt[i]<censortu[i] && nt[i]>censortl[i]){
-      if(runif(1)<0.9){type[i] = 1;t1[i]=nt[i]}
+      if(runif(1)<0.6){type[i] = 1;t1[i]=nt[i]}
       else{type[i] = 4;t1[i]=censortl[i];t2[i]=censortu[i]}
       }
-  }
+
 }
 
 #Setup for MCMC

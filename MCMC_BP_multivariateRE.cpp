@@ -48,7 +48,7 @@ arma::mat matrixproduct(arma::mat Randomz, arma::vec randomeffect, int n, int m,
 // [[Rcpp::export]]
 double invF0(double u){
     double a = 0.0; double b = 100.0;
-    int maxrun = 10000;double tol = 1.0e-10;
+    int maxrun = 1000; double tol = 1.0e-10;
     double pa=F0(a);
     double pb=F0(b);
     double newa, newb, ahalf;
@@ -107,7 +107,7 @@ arma::vec sampleTs(std::vector<std::string> model,int n,int m,int sizew,arma::ma
     double u;
     double Fu;
     int ind=1;
-    arma::vec t(n*m);
+    arma::vec t(n*m); t.zeros();
     arma::mat cr(n*m,1);cr.zeros();
     cr = crx*crcoef+matrixproduct(Randomz, cru, n, m, sizew);
     cr.col(0) = arma::exp(cr.col(0))/(1.0+arma::exp(cr.col(0)));
@@ -280,7 +280,7 @@ double AFT_BP_logsurvdiff(double t1, double t2, double th1, double th2, arma::ve
 arma::vec AFT_BP_logliki(arma::vec t1, arma::vec t2, 
                          Rcpp::IntegerVector type, double th1, double th2, arma::vec w,
                          int BP, int distr, arma::vec FXbeta,arma::vec Fv,
-                         arma::vec crXbeta,arma::vec crv,arma::mat missing){
+                         arma::vec crXbeta,arma::vec crv){
   arma::vec res(type.size());res.zeros();
   double temp,temp2;
   double logl;
@@ -304,12 +304,6 @@ arma::vec AFT_BP_logliki(arma::vec t1, arma::vec t2,
       if (logl<SYSMIN){res(i) = LOGSYSMIN;}
       else{res(i) = log(logl);}
       /*Interval-observed*/
-/*Interval-observed*/
-    }else{
-      if(missing(i,0)>0.5){res(i) = AFT_BP_logpdf(missing(i,1), th1, th2, w, BP, distr, FXbeta(i)+Fv(i))+log(temp)
-        -exp(AFT_BP_logcdf(missing(i,1), th1, th2, w, BP, distr, FXbeta(i)+Fv(i)))*temp; /*Observed*/
-      }
-      else{res(i) = -exp(AFT_BP_logcdf(missing(i,1), th1, th2, w, BP, distr, FXbeta(i)+Fv(i)))*temp;}
     }
   } 
   return(res);
@@ -391,7 +385,7 @@ double PH_BP_logsurvdiff(double t1, double t2, double th1, double th2, arma::vec
 arma::vec PH_BP_logliki(arma::vec t1, arma::vec t2, 
                          Rcpp::IntegerVector type, double th1, double th2, arma::vec w,
                          int BP, int distr, arma::vec FXbeta,arma::vec Fv,
-                         arma::vec crXbeta,arma::vec crv,arma::mat missing){
+                         arma::vec crXbeta,arma::vec crv){
   arma::vec res(type.size());res.zeros();
   double temp,temp2;
   double logl;
@@ -415,11 +409,6 @@ arma::vec PH_BP_logliki(arma::vec t1, arma::vec t2,
       if (logl<SYSMIN){res(i) = LOGSYSMIN;}
       else{res(i) = log(logl);}
       /*Interval-observed*/
-    }else{
-      if(missing(i,0)>0.5){res(i) = PH_BP_logpdf(missing(i,1), th1, th2, w, BP, distr, FXbeta(i)+Fv(i))+log(temp)
-        -exp(PH_BP_logcdf(missing(i,1), th1, th2, w, BP, distr, FXbeta(i)+Fv(i)))*temp; /*Observed*/
-      }
-      else{res(i) = -exp(PH_BP_logcdf(missing(i,1), th1, th2, w, BP, distr, FXbeta(i)+Fv(i)))*temp;}
     }
   } 
   return(res);
@@ -509,7 +498,7 @@ double PO_BP_logsurvdiff(double t1, double t2, double th1, double th2, arma::vec
 arma::vec PO_BP_logliki(arma::vec t1, arma::vec t2, 
                         Rcpp::IntegerVector type, double th1, double th2, arma::vec w,
                         int BP, int distr, arma::vec FXbeta,arma::vec Fv,
-                        arma::vec crXbeta,arma::vec crv,arma::mat missing){
+                        arma::vec crXbeta,arma::vec crv){
   arma::vec res(type.size());res.zeros();
   double temp,temp2;
   double logl;
@@ -531,13 +520,6 @@ arma::vec PO_BP_logliki(arma::vec t1, arma::vec t2,
       -exp(-exp(PO_BP_logcdf(t2(i), th1, th2, w, BP, distr, FXbeta(i)+Fv(i)))*temp);
       if (logl<SYSMIN){res(i) = LOGSYSMIN;}
       else{res(i) = log(logl);}
-      /*Interval-observed*/
-      /*Interval-observed*/
-    }else{
-      if(missing(i,0)>0.5){res(i) = PO_BP_logpdf(missing(i,1), th1, th2, w, BP, distr, FXbeta(i)+Fv(i))+log(temp)
-        -exp(PO_BP_logcdf(missing(i,1), th1, th2, w, BP, distr, FXbeta(i)+Fv(i)))*temp; /*Observed*/
-      }
-      else{res(i) = -exp(PO_BP_logcdf(missing(i,1), th1, th2, w, BP, distr, FXbeta(i)+Fv(i)))*temp;}
     }
   } 
   return(res);
@@ -576,16 +558,16 @@ arma::vec PO_BP_logliki_para(arma::vec t1, arma::vec t2,
 arma::vec likelihoodv(std::vector<std::string> model,int BP,int m, arma::vec t1, arma::vec t2, 
                   Rcpp::IntegerVector type, double th1, double th2, arma::vec w,
                    int distr, arma::vec FXbeta,arma::vec Fv,
-                  arma::vec crXbeta,arma::vec crv,arma::mat missing){
+                  arma::vec crXbeta,arma::vec crv){
   arma::vec res(type.size());
   if(model[0] =="PH"){
-    res = PH_BP_logliki(t1, t2, type, th1, th2, w, BP, distr, FXbeta,Fv,crXbeta,crv,missing);
+    res = PH_BP_logliki(t1, t2, type, th1, th2, w, BP, distr, FXbeta,Fv,crXbeta,crv);
   }
   if(model[0] =="AFT"){
-    res = AFT_BP_logliki(t1, t2, type, th1, th2, w, BP, distr, FXbeta,Fv,crXbeta,crv,missing);
+    res = AFT_BP_logliki(t1, t2, type, th1, th2, w, BP, distr, FXbeta,Fv,crXbeta,crv);
   }
   if(model[0] =="PO"){
-    res = PO_BP_logliki(t1, t2, type, th1, th2, w, BP, distr, FXbeta,Fv,crXbeta,crv,missing);
+    res = PO_BP_logliki(t1, t2, type, th1, th2, w, BP, distr, FXbeta,Fv,crXbeta,crv);
   }
   int n = type.size()/m;
   arma::vec loglikeliv(n);loglikeliv.zeros();
@@ -660,56 +642,6 @@ double invF(double u, double th1, double th2, arma::vec w, int BP, int distr){
 }
 
 
-
-// [[Rcpp::export]]
-arma::mat missing_impute_t(std::vector<std::string> model,int BP, int distr, double maxc,arma::vec t1, arma::vec t2, 
-                           Rcpp::IntegerVector type, double th1, double th2, arma::vec w,
-                           arma::vec FXbeta,arma::vec Fv,
-                           arma::vec crXbeta,arma::vec crv){
-    int n = type.size();
-    arma::mat nt(n,2); nt.zeros(); 
-    double z, u,nz,cr,FX;
-    
-    for(int j=1;j<=n;j++){
-      nt(j-1,1) = 0.0;
-      if(type(j-1)==5){
-       cr = -log(exp(crXbeta(j-1)+crv(j-1))/(1.0+exp(crXbeta(j-1)+crv(j-1))));
-       // cr = exp(crXbeta(j-1)+crv(j-1));
-       FX = exp(FXbeta(j-1)+Fv(j-1));
-       u = Rf_runif(0.0, 1.0);
-      if(u<=std::exp(-cr)){nt(j-1,1) = 1000.0;} 
-      else{
-        /*obtain the baseline probability from different models*/
-          z = -std::log(u)/cr; 
-        
-        if(model[0]=="PH"){
-          nz = 1.0-std::pow((1.0-z),1.0/FX);
-        }
-        if(model[0]=="PO"){
-          double ratio = z/(1.0-z);
-          nz = ratio/(ratio+FX);
-        }
-        
-        if(model[0]=="AFT"){
-          nz = z;
-        }
-        
-       /*Sample from the baseline*/
-        nt(j-1,1) = invF(nz, th1,th2,w, BP, distr);
-       
-          if(model[0]=="AFT"){
-            nt(j-1,1)=nt(j-1,1)/FX;
-          }
-         
-        } 
-      if(nt(j-1,1)>maxc){nt(j-1,1)=maxc;nt(j-1,0) = 0.0;}
-      else{nt(j-1,0)=1.0;}
-      
-      }
-      
-      }
-  return(nt);  
-}
 
 
 
