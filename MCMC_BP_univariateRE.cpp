@@ -132,7 +132,7 @@ double S0BP(double t, double th1, double th2, arma::vec w, int BP, int distr){
       Ft = std::exp(tmp1)/(1.0+std::exp(tmp1));
     }else if (distr==2){
       Ft = Rf_pnorm5(tmp1, 0, 1, true, false);
-    }else{
+    }else if (distr==3){
       Ft = 1.0-std::exp(-std::exp(tmp1));
     }
     if(Ft<SYSMIN) {Ft=SYSMIN;}
