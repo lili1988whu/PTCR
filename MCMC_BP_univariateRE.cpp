@@ -152,7 +152,7 @@ double S0BP(double t, double th1, double th2, arma::vec w, int BP, int distr){
       surv = 1.0/(1.0+std::exp(tmp1));
     }else if (distr==2){
       surv = Rf_pnorm5(tmp1, 0, 1, false, false);
-    }else{
+    }else if (distr==3){
       surv = std::exp(-std::exp(tmp1));
     }
   }
@@ -182,7 +182,7 @@ double logf0BP(double t, double th1, double th2,arma::vec w, int BP, int distr){
     }else if (distr==2){
       Ft = Rf_pnorm5(tmp1, 0, 1, true, false);
       logft = Rf_dlnorm(t, -th1, std::exp(-th2), true);
-    }else{
+    }else if (distr==3){
       Ft = 1.0-std::exp(-std::exp(tmp1));
       logft = th2 + tmp1*(1.0-std::exp(-th2)) + th1 - std::exp(tmp1);
     }
@@ -201,7 +201,7 @@ double logf0BP(double t, double th1, double th2,arma::vec w, int BP, int distr){
       ll = th2 + tmp1*(1.0-std::exp(-th2)) + th1 - 2.0*std::log(1.0+std::exp(tmp1));
     }else if (distr==2){
       ll = Rf_dlnorm(t, -th1, std::exp(-th2), true);
-    }else{
+    }else if (distr==3){
       ll = th2 + tmp1*(1.0-std::exp(-th2)) + th1 - std::exp(tmp1);
     }
   }
@@ -261,7 +261,7 @@ double AFT_BP_logsurvdiff(double t1, double t2, double th1, double th2, arma::ve
 arma::vec AFT_BP_logliki(arma::vec t1, arma::vec t2, 
                          Rcpp::IntegerVector type, double th1, double th2, arma::vec w,
                          int BP, int distr, arma::vec FXbeta,arma::vec Fv,
-                         arma::vec crXbeta,arma::vec crv,arma::mat missing){
+                         arma::vec crXbeta,arma::vec crv){
   arma::vec res(type.size());res.zeros();
   double temp,temp2;
   double logl;
@@ -286,42 +286,11 @@ arma::vec AFT_BP_logliki(arma::vec t1, arma::vec t2,
       else{res(i) = log(logl);}
       /*Interval-observed*/
 /*Interval-observed*/
-    }else{
-      if(missing(i,0)>0.5){res(i) = AFT_BP_logpdf(missing(i,1), th1, th2, w, BP, distr, FXbeta(i)+Fv(i))+log(temp)
-        -exp(AFT_BP_logcdf(missing(i,1), th1, th2, w, BP, distr, FXbeta(i)+Fv(i)))*temp; /*Observed*/
-      }
-      else{res(i) = -exp(AFT_BP_logcdf(missing(i,1), th1, th2, w, BP, distr, FXbeta(i)+Fv(i)))*temp;}
     }
   } 
   return(res);
 }
 
-// [[Rcpp::export]]
-arma::vec AFT_BP_logliki_para(arma::vec t1, arma::vec t2, 
-                         Rcpp::IntegerVector type, double th1, double th2, arma::vec w,
-                         int BP, int distr, arma::vec FXbeta,arma::vec Fv,
-                         arma::vec crXbeta,arma::vec crv){
-  arma::vec res(type.size());res.zeros();
-  double temp,temp2=0.0;
-  for(int i=0; i<type.size(); i++){
-    temp2 = exp(crXbeta(i)+crv(i))/(1.0+exp(crXbeta(i)+crv(i)));
-    if(temp2<SYSMIN){temp = -LOGSYSMIN;}
-    else{temp =-log(temp2);}
-    //temp = exp(crXbeta(i)+crv(i));
-    if(type[i]==1){
-      res(i) = AFT_BP_logpdf(t1(i), th1, th2, w, BP, distr, FXbeta(i)+Fv(i))+log(temp)
-      -exp(AFT_BP_logcdf(t1(i), th1, th2, w, BP, distr, FXbeta(i)+Fv(i)))*temp; /*Observed*/
-    }else if(type[i]==2){
-      res(i) = log(1.0-exp(-exp(AFT_BP_logcdf(t2(i), th1, th2, w, BP, distr, FXbeta(i)+Fv(i)))*temp ) ) ;/*Left censored*/
-    }else if(type[i]==3){
-      res(i) = -exp(AFT_BP_logcdf(t1(i), th1, th2, w, BP, distr, FXbeta(i)+Fv(i)))*temp;/*Right censored*/
-    }else if (type[i]==4){
-      res(i) = log(exp(-exp(AFT_BP_logcdf(t1(i), th1, th2, w, BP, distr, FXbeta(i)+Fv(i)))*temp)
-                     -exp(-exp(AFT_BP_logcdf(t2(i), th1, th2, w, BP, distr, FXbeta(i)+Fv(i)))*temp));/*Interval-observed*/
-    }
-  } 
-  return(res);
-}
 
 
 /////////////////////////////////////////////////////////////////////////
@@ -372,7 +341,7 @@ double PH_BP_logsurvdiff(double t1, double t2, double th1, double th2, arma::vec
 arma::vec PH_BP_logliki(arma::vec t1, arma::vec t2, 
                          Rcpp::IntegerVector type, double th1, double th2, arma::vec w,
                          int BP, int distr, arma::vec FXbeta,arma::vec Fv,
-                         arma::vec crXbeta,arma::vec crv,arma::mat missing){
+                         arma::vec crXbeta,arma::vec crv){
   arma::vec res(type.size());res.zeros();
   double temp,temp2;
   double logl;
@@ -396,40 +365,11 @@ arma::vec PH_BP_logliki(arma::vec t1, arma::vec t2,
       if (logl<SYSMIN){res(i) = LOGSYSMIN;}
       else{res(i) = log(logl);}
       /*Interval-observed*/
-    }else{
-      if(missing(i,0)>0.5){res(i) = PH_BP_logpdf(missing(i,1), th1, th2, w, BP, distr, FXbeta(i)+Fv(i))+log(temp)
-        -exp(PH_BP_logcdf(missing(i,1), th1, th2, w, BP, distr, FXbeta(i)+Fv(i)))*temp; /*Observed*/
-      }
-      else{res(i) = -exp(PH_BP_logcdf(missing(i,1), th1, th2, w, BP, distr, FXbeta(i)+Fv(i)))*temp;}
     }
   } 
   return(res);
 }
-// [[Rcpp::export]]
-arma::vec PH_BP_logliki_para(arma::vec t1, arma::vec t2, 
-                              Rcpp::IntegerVector type, double th1, double th2, arma::vec w,
-                              int BP, int distr, arma::vec FXbeta,arma::vec Fv,
-                              arma::vec crXbeta,arma::vec crv){
-  arma::vec res(type.size());res.zeros();
-  double temp,temp2;
-  for(int i=0; i<type.size(); i++){
-    temp2 = exp(crXbeta(i)+crv(i))/(1.0+exp(crXbeta(i)+crv(i)));
-    if(temp2<SYSMIN){temp = -LOGSYSMIN;}
-    else{temp =-log(temp2);}
-    if(type[i]==1){
-      res(i) = PH_BP_logpdf(t1(i), th1, th2, w, BP, distr, FXbeta(i)+Fv(i))+log(temp)
-      -exp(PH_BP_logcdf(t1(i), th1, th2, w, BP, distr, FXbeta(i)+Fv(i)))*temp; /*Observed*/
-    }else if(type[i]==2){
-      res(i) = log(1.0-exp(-exp(PH_BP_logcdf(t2(i), th1, th2, w, BP, distr, FXbeta(i)+Fv(i)))*temp ) ) ;/*Left censored*/
-    }else if(type[i]==3){
-      res(i) = -exp(PH_BP_logcdf(t1(i), th1, th2, w, BP, distr, FXbeta(i)+Fv(i)))*temp;/*Right censored*/
-    }else if (type[i]==4){
-      res(i) = log(exp(-exp(PH_BP_logcdf(t1(i), th1, th2, w, BP, distr, FXbeta(i)+Fv(i)))*temp)
-                     -exp(-exp(PH_BP_logcdf(t2(i), th1, th2, w, BP, distr, FXbeta(i)+Fv(i)))*temp));/*Interval-observed*/
-    }
-  } 
-  return(res);
-}
+
 /////////////////////////////////////////////////////////////////////////
 //////////////////////////// PO model //////////////////////////////////
 /////////////////////////////////////////////////////////////////////////
@@ -490,7 +430,7 @@ double PO_BP_logsurvdiff(double t1, double t2, double th1, double th2, arma::vec
 arma::vec PO_BP_logliki(arma::vec t1, arma::vec t2, 
                         Rcpp::IntegerVector type, double th1, double th2, arma::vec w,
                         int BP, int distr, arma::vec FXbeta,arma::vec Fv,
-                        arma::vec crXbeta,arma::vec crv,arma::mat missing){
+                        arma::vec crXbeta,arma::vec crv){
   arma::vec res(type.size());res.zeros();
   double temp,temp2;
   double logl;
@@ -514,41 +454,12 @@ arma::vec PO_BP_logliki(arma::vec t1, arma::vec t2,
       else{res(i) = log(logl);}
       /*Interval-observed*/
       /*Interval-observed*/
-    }else{
-      if(missing(i,0)>0.5){res(i) = PO_BP_logpdf(missing(i,1), th1, th2, w, BP, distr, FXbeta(i)+Fv(i))+log(temp)
-        -exp(PO_BP_logcdf(missing(i,1), th1, th2, w, BP, distr, FXbeta(i)+Fv(i)))*temp; /*Observed*/
-      }
-      else{res(i) = -exp(PO_BP_logcdf(missing(i,1), th1, th2, w, BP, distr, FXbeta(i)+Fv(i)))*temp;}
     }
   } 
   return(res);
 }
 
-// [[Rcpp::export]]
-arma::vec PO_BP_logliki_para(arma::vec t1, arma::vec t2, 
-                             Rcpp::IntegerVector type, double th1, double th2, arma::vec w,
-                             int BP, int distr, arma::vec FXbeta,arma::vec Fv,
-                             arma::vec crXbeta,arma::vec crv){
-  arma::vec res(type.size());res.zeros();
-  double temp,temp2;
-  for(int i=0; i<type.size(); i++){
-    temp2 = exp(crXbeta(i)+crv(i))/(1.0+exp(crXbeta(i)+crv(i)));
-    if(temp2<SYSMIN){temp = -LOGSYSMIN;}
-    else{temp =-log(temp2);}
-    if(type[i]==1){
-      res(i) = PO_BP_logpdf(t1(i), th1, th2, w, BP, distr, FXbeta(i)+Fv(i))+log(temp)
-      -exp(PO_BP_logcdf(t1(i), th1, th2, w, BP, distr, FXbeta(i)+Fv(i)))*temp; /*Observed*/
-    }else if(type[i]==2){
-      res(i) = log(1.0-exp(-exp(PO_BP_logcdf(t2(i), th1, th2, w, BP, distr, FXbeta(i)+Fv(i)))*temp ) ) ;/*Left censored*/
-    }else if(type[i]==3){
-      res(i) = -exp(PO_BP_logcdf(t1(i), th1, th2, w, BP, distr, FXbeta(i)+Fv(i)))*temp;/*Right censored*/
-    }else if (type[i]==4){
-      res(i) = log(exp(-exp(PO_BP_logcdf(t1(i), th1, th2, w, BP, distr, FXbeta(i)+Fv(i)))*temp)
-                     -exp(-exp(PO_BP_logcdf(t2(i), th1, th2, w, BP, distr, FXbeta(i)+Fv(i)))*temp));/*Interval-observed*/
-    }
-  } 
-  return(res);
-}
+
 
 // [[Rcpp::export]]
 arma::mat matrixproduct(arma::mat Randomz, arma::vec randomeffect, int n, int m, int sizere){
@@ -570,143 +481,23 @@ arma::mat matrixproduct(arma::mat Randomz, arma::vec randomeffect, int n, int m,
 
 
 // [[Rcpp::export]]
-arma::vec likelihoodv(std::vector<std::string> model,int BP,int m, arma::vec t1, arma::vec t2, 
+arma::vec likelihoodv(std::vector<std::string> model,int BP, arma::vec t1, arma::vec t2, 
                   Rcpp::IntegerVector type, double th1, double th2, arma::vec w,
                    int distr, arma::vec FXbeta,arma::vec Fv,
-                  arma::vec crXbeta,arma::vec crv,arma::mat missing){
+                  arma::vec crXbeta,arma::vec crv){
   arma::vec res(type.size());
   if(model[0] =="PH"){
-    res = PH_BP_logliki(t1, t2, type, th1, th2, w, BP, distr, FXbeta,Fv,crXbeta,crv,missing);
+    res = PH_BP_logliki(t1, t2, type, th1, th2, w, BP, distr, FXbeta,Fv,crXbeta,crv);
   }
   if(model[0] =="AFT"){
-    res = AFT_BP_logliki(t1, t2, type, th1, th2, w, BP, distr, FXbeta,Fv,crXbeta,crv,missing);
+    res = AFT_BP_logliki(t1, t2, type, th1, th2, w, BP, distr, FXbeta,Fv,crXbeta,crv);
   }
   if(model[0] =="PO"){
-    res = PO_BP_logliki(t1, t2, type, th1, th2, w, BP, distr, FXbeta,Fv,crXbeta,crv,missing);
+    res = PO_BP_logliki(t1, t2, type, th1, th2, w, BP, distr, FXbeta,Fv,crXbeta,crv);
   }
-  int n = type.size()/m;
-  arma::vec loglikeliv(n);loglikeliv.zeros();
-  int ibegin, iend;
-  for(int i=1;i<=n;i++){
-    ibegin = (i-1)*m;
-    iend = i*m-1;
-    loglikeliv(i-1) = arma::sum(res.subvec(ibegin,iend));
-  }
-  return(loglikeliv);
+  return(res);
 }
 
-// [[Rcpp::export]]
-arma::vec likelihoodv_para(std::vector<std::string> model,int BP,int m,arma::vec t1, arma::vec t2, 
-                      Rcpp::IntegerVector type, double th1, double th2, arma::vec w, int distr, arma::vec FXbeta,arma::vec Fv,
-                      arma::vec crXbeta,arma::vec crv){
-  arma::vec res(type.size());
-  if(model[0] =="PH"){
-    res = PH_BP_logliki_para(t1, t2, type, th1, th2, w, BP, distr, FXbeta,Fv,crXbeta,crv);
-  }
-  if(model[0] =="AFT"){
-    res = AFT_BP_logliki_para(t1, t2, type, th1, th2, w, BP, distr, FXbeta,Fv,crXbeta,crv);
-  }
-  if(model[0] =="PO"){
-    res = PO_BP_logliki_para(t1, t2, type, th1, th2, w, BP, distr, FXbeta,Fv,crXbeta,crv);
-  }
-  int n = type.size()/m;
-  arma::vec loglikeliv(n);loglikeliv.zeros();
-  int ibegin, iend;
-  for(int i=1;i<=n;i++){
-    ibegin = (i-1)*m;
-    iend = i*m-1;
-    loglikeliv(i-1) = arma::sum(res.subvec(ibegin,iend));
-  }
-  return(loglikeliv);
-}
-
-// [[Rcpp::export]]
-double invF(double u, double th1, double th2, arma::vec w, int BP, int distr){
-  arma::vec ends(2),pends(2);ends.zeros();pends.zeros();
-  arma::vec newends(2),pnewends(2);newends.zeros();pnewends.zeros();
-  ends(0) = 0.0; ends(1) = 500.0;
-  int maxrun = 10000;double tol = 1.0e-10;
-  pends(1) = F0BP(ends(1),th1, th2, w,BP,distr);
-  pends(0) = F0BP(ends(0),th1, th2, w,BP,distr);
-  double newa, newb, ahalf,sample;
-  int krun =1;  
-  if(u<=pends(0)){sample=ends(0);}
-  if(u>=pends(1)){sample=ends(1);}
-  if(u<pends(1) && u>pends(0)){
-    newa = ends(0);  newb = ends(1);
-    ahalf = (newa+newb)/2;
-    newends(0)=newa;newends(1)=ahalf;
-    pnewends(1) = F0BP(newends(1),th1, th2, w,BP,distr);
-    pnewends(0) = F0BP(newends(0),th1, th2, w,BP,distr);
-    while(std::abs(pnewends(1)-u)>tol && krun<=maxrun){
-      if(u<=pnewends(1)){
-        newb = ahalf;
-      }
-      else{
-        newa = ahalf;
-      }
-      ahalf=(newa+newb)/2;
-      krun=krun+1; 
-      newends(0)=newa;newends(1)=ahalf;
-      pnewends(1) = F0BP(newends(1),th1, th2, w,BP,distr);
-      pnewends(0) = F0BP(newends(0),th1, th2, w,BP,distr);
-    }
-    sample = ahalf;
-  }
-  return(sample) ;
-}
-
-
-
-// [[Rcpp::export]]
-arma::mat missing_impute_t(std::vector<std::string> model,int BP, int distr, double maxc,arma::vec t1, arma::vec t2, 
-                           Rcpp::IntegerVector type, double th1, double th2, arma::vec w,
-                           arma::vec FXbeta,arma::vec Fv,
-                           arma::vec crXbeta,arma::vec crv){
-    int n = type.size();
-    arma::mat nt(n,2); nt.zeros(); 
-    double z, u,nz,cr,FX;
-    
-    for(int j=1;j<=n;j++){
-      nt(j-1,1) = 0.0;
-      if(type(j-1)==5){
-       cr = -log(exp(crXbeta(j-1)+crv(j-1))/(1.0+exp(crXbeta(j-1)+crv(j-1))));
-       // cr = exp(crXbeta(j-1)+crv(j-1));
-       FX = exp(FXbeta(j-1)+Fv(j-1));
-       u = Rf_runif(0.0, 1.0);
-      if(u<=std::exp(-cr)){nt(j-1,1) = 1000.0;} 
-      else{
-        /*obtain the baseline probability from different models*/
-          z = -std::log(u)/cr; 
-        
-        if(model[0]=="PH"){
-          nz = 1.0-std::pow((1.0-z),1.0/FX);
-        }
-        if(model[0]=="PO"){
-          double ratio = z/(1.0-z);
-          nz = ratio/(ratio+FX);
-        }
-        
-        if(model[0]=="AFT"){
-          nz = z;
-        }
-        
-       /*Sample from the baseline*/
-        nt(j-1,1) = invF(nz, th1,th2,w, BP, distr);
-       
-          if(model[0]=="AFT"){
-            nt(j-1,1)=nt(j-1,1)/FX;
-          }
-         
-        } 
-      if(nt(j-1,1)>maxc){nt(j-1,1)=maxc;nt(j-1,0) = 0.0;}
-      else{nt(j-1,0)=1.0;}
-      
-      }
-      
-      }
-  return(nt);  
-}
 
 
 
@@ -876,46 +667,18 @@ arma::mat recursivecov_vector(int d, int samplesize,arma::mat pre_cov,arma::vec 
 
 
 // [[Rcpp::export]] 
-arma::mat samplerandomeffect(arma::vec FTw, arma::vec cru, arma::vec cov_randomeffect, double phi, int n)
+arma::mat samplerancrv(arma::vec cru, arma::vec var, int m)
 {
   double wuiold,wuinew,covm;
-  arma::mat newFTwcru(n,2);newFTwcru.zeros();
+  arma::vec newcru(m);newcru.zeros();
   
-  for(int l=1;l<=n;l++){
+  for(int l=1;l<=m;l++){
     wuiold = cru(l-1);
-    covm = cov_randomeffect(l-1);
+    covm = var(l-1);
     wuinew = Rf_rnorm(wuiold, sqrt(covm));
-    newFTwcru(l-1,0) = phi*wuinew;
-    newFTwcru(l-1,1) = wuinew;
+    newcru(l-1) = wuinew;
   }
   
-  return(newFTwcru);
+  return(newcru);
 }
-// [[Rcpp::export]] 
-arma::mat randomeffect (arma::vec cru_o,arma::vec cru_n,arma::vec likelihoodv_o, arma::vec likelihoodv_n, double invsigmastar,int n,int m)
-{
-  int ibegin1;
-  int iend1;
-  double wuiold;
-  double wuinew;
-  arma::mat randomu(2,n);randomu.zeros();
-  double likelihoodi_o,likelihoodi_n;
-  double priori_o,priori_n;
-  for(int l=1;l<=n;l++){
-    wuiold = cru_o(l-1);
-    wuinew = cru_n(l-1);
-    likelihoodi_o = likelihoodv_o(l-1);
-    likelihoodi_n = likelihoodv_n(l-1);
-    priori_o = -wuiold*invsigmastar*wuiold/2.0;
-    priori_n = -wuinew*invsigmastar*wuinew/2.0;
-    if(log(Rf_runif(0.0, 1.0))<(likelihoodi_n+priori_n-likelihoodi_o-priori_o)){
-      randomu(0,l-1) = wuinew;randomu(1,l-1)=randomu(1,l-1)+1.0;
-    }
-    else{
-      randomu(0,l-1) = wuiold;
-    }
-    /*cout <<"u"<< likelihoodi_n+priori_n <<"z"<< likelihoodi_o-priori_o<< " " <<Rf_runif(0.0, 1.0)<<".\n";*/
-  }
-return(randomu);
-}
-  
+

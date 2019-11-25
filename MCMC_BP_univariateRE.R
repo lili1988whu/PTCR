@@ -1,324 +1,391 @@
-#Gwishart random effect cov
-#dimFTcoef--indicator whether there are covariates for the survival part
-
-Rcpp::sourceCpp("MCMC_BP_univariateRE.cpp")
-
+Rcpp::sourceCpp('MCMC_BP_univariateRE.cpp')
 produ<-function(x,beta){
   if(length(beta)>1){return(x%*%beta)}
   else{return(x*beta)}
 }
-mcmc<-function(model,distr,maxc,t1,t2,type,m,BP,SR,crx,FTx,dimFTcoef,nrun,nskip,nskip_r,nburn,nburn_r,Jw,a_alpha,b_alpha,th_initial){
-  if(is.vector(crx)){pcr = 1}else{pcr = length(crx[1,])}
-  if(is.vector(FTx)){pFT = 1}else{  pFT = length(FTx[1,])}
- #Parametric fit to obtain priors for theta
-  likelihoodoptim<-function(parameters){
-    th1_p = parameters[1] 
-    th2_p = parameters[2]
-    crcoef_p=parameters[3:(pcr+2)] 
-    if(dimFTcoef>0){FTcoef_p=parameters[(pcr+3):(pcr+2+pFT)];FXbeta = produ(FTx,FTcoef_p)}else{FXbeta = rep(0,length(t1))}
-    w = rep(1/Jw,Jw)
-    crXbeta = produ(crx,crcoef_p)
-    Fv = rep(0,length(t1))
-    crv = rep(0,length(t1))
-    p=likelihoodv_para(model, 0,m, t1, t2, type, th1_p, th2_p, w, distr, FXbeta, 
-                       Fv, crXbeta, crv) 
-    return(-sum(p));
+
+likelihood.wrapper<-function(model,BP,distr,data,parameters){
+  #model---"AFT" or "PH" or "PO"
+  #BP--0: no Bernstein Polynomial modeling of the baseline hazard function; 1: Otherwise
+  #distr--1:Logistic distribution; 2:Normal distribution; 3: Weibull distribution
+  #data includes:
+               #t1--lower bound of the observed interval for failure time or observed; default is zero
+               #t2--upper bound of the observed interval for failure time or observed; default is Inf
+               #ci -- cluster indicator
+               #type--1: failure time is observed; 2: failure time is left censored; 3: failure time is
+                      #right censored; 4: failure time is interval-censored
+               #FTx--covariates for the latent failure time distribution; could be NULL
+               #crx--covariates for the cure rate 
+  #parameter includes  
+               #z--transformed weight parameters
+               #th1, th2--parameters of the centering distribution
+               #FTcoef--coefficients for FTx; could be NULL
+               #crcoef--coefficients for crx
+               #crv--random effects for cure rate; could be NULL
+               #FTv--random effects for latent failure time distribution; could be NULL
+  t1 = data$t1
+  t2 = data$t2
+  type = data$type
+  FTx = data$FTx
+  crx = data$crx
+  ci = data$ci
+  n.per.cluster = as.vector(table(ci))
+  
+  z = parameters$z
+  th1 = parameters$th1; th2 = parameters$th2
+  FTcoef = parameters$FTcoef; crcoef = parameters$crcoef
+  
+  Fv = parameters$Fv[ci]
+  crv = parameters$crv[ci]
+  
+  dimFTcoef = ifelse(is.null(dim(FTx)),NULL,dim(FTx)[2])
+  FTbeta = ifelse(is.null(dimFTcoef), rep(0,length(ci)), produ(FTx,FTcoef))
+  dimcrcoef = ifelse(is.null(dim(crx)),NULL,dim(crx)[2])
+  crXbeta = ifelse(is.null(dimcrcoef), rep(0,length(ci)), produ(crx,crcoef)) 
+  weight = Ys.to.weight(z)
+  likelihoodall = likelihoodv(model,BP, t1,  t2, type, th1, th2, w, distr, FXbeta, Fv, crXbeta, crv)
+  tempdata = data.frame(likelihoodall,ci)
+  likelihoodi = as.vector(tapply(tempdata$likelihoodall,INDEX = tempdata$ci, FUN = sum))
+  likelihoodsum = sum( likelihoodall)  
+  return(list(likelihoodi = likelihoodi,likelihoodsum = likelihoodsum))
+}
+
+mcmc.init <- function (model = "PH", distr=3, data, th.initial){
+  #model---"AFT" or "PH" or "PO"
+  #distr--1:Logistic distribution; 2: log-Normal distribution; 3: Weibull distribution
+  #data includes:
+       #t1--lower bound of the observed interval for failure time or observed; default is zero
+       #t2--upper bound of the observed interval for failure time or observed; default is Inf
+       #ci -- cluster indicator
+       #type--1: failure time is observed; 2: failure time is left censored; 3: failure time is
+           #right censored; 4: failure time is interval-censored
+       #FTx--covariates for the latent failure time distribution; could be NULL
+       #crx--covariates for the cure rate 
+  t1 = data$t1
+  t2 = data$t2
+  type = data$type
+  FTx = data$FTx
+  crx = data$crx
+  ci = data$ci
+  m = unique(ci)
+  pcr = ifelse(is.null(crx),NULL, dim(crx)[2])
+  pFT = ifelse(is.null(FTx),NULL, dim(FTx)[2])
+  #Parametric fit to obtain priors for theta
+  likelihoodoptim<-function(pa.input){
+    #pa.input includes  
+    #th1, th2--parameters of the centering distribution
+    #FTcoef--coefficients for FTx; could be NULL
+    #crcoef--coefficients for crx
+    
+    parameters$th1 = pa.input[1];  parameters$th2 = pa.input[2]
+    parameters$crcoef = ifelse(is.null(pcr), NULL,pa.input[3:(pcr+2)])
+    templength = ifelse(is.null(pcr),2,pcr+2)
+    parameters$FTcoef = ifelse(is.null(pFT), NULL,pa.input[(templength+3):(templength+pFT)])
+    parameters$z = c(0,0)
+    parameters$Fv = rep(0,length(t1))
+    parameters$crv = rep(0,length(t1))
+    p = likelihood.wrapper(model,BP = 0,distr,data,parameters)$likelihoodsum
+    return(-p);
   }
-  if(dimFTcoef>0){parastart=c(th_initial,rep(0,pcr),rep(0,pFT))}else{parastart=c(th_initial,rep(0,pcr))}
+  
+  parastart = ifelse(is.null(pFT), c(th.initial,rep(0,pcr)),c(th.initial,rep(0,pcr),rep(0,pFT)))
   fit = optim(par=parastart,likelihoodoptim,hessian="TRUE")
-  pmean_th = fit$par[1:2]
-  if(BP>0){pcov_th = fit$hessian[1:2,1:2]}
-  else{pcov_th = 0.001*fit$hessian[1:2,1:2]}
   
   #--------------------------------------------------------------------#
   #initial values
   #-------------------------------------------------------------------------------------------------------------#
-  th_c = fit$par[1:2]
-  crcoef_c = fit$par[3:(pcr+2)]
-  if(dimFTcoef>0){FTcoef_c = fit$par[(pcr+3):(pcr+2+pFT)]}else{FTcoef_c = 0}
-  bz_c = rep(0,Jw-1)
-  Sigma_c = 0.2
-  phi_c = 0.3
-  alpha_c = 0.5
-  if(SR>0){randomeffect_c=rnorm(n,0,0.01)}else{randomeffect_c=rep(0,n)}
+  pmean.th = fit$par[1:2]; pcov.th = 0.001*fit$hessian[1:2,1:2]
+  crcoef  = fit$par[3:(pcr+2)]
+  FTcoef  = ifelse(is.null(pFT), NULL,fit$par[(pcr+3):(pcr+2+pFT)])
+  bz  = rep(0,Jw-1)
+  sigma  = 0.2
+  phi  = 0.3
+  alpha  = 0.5
+  Fv  = ifelse(SR>0, rnorm(n,0,0.01),rep(0,m))
+  crv  = ifelse(SR>0, rnorm(n,0,0.01),rep(0,m))
+  
+  return(list(theta = pmean.th, theta.mean = pmean.th, theta.cov = pcov.th, crcoef = crcoef, 
+              FTcoef = FTcoef, bz = bz, sigma = sigma, phi = phi, 
+              logalpha = log(alpha),Fv= Fv, crv = crv))
+}
+
+
+adaptive.v.mean.cov <-function(d,samplesize,proposal.old,new.x,smalln, adaptive.c){
+  new.mean = recursivemean_vector(proposal.old$mean, new.x, samplesize)
+  new.cov = recursivecov_vector(d, samplesize,proposal.old$cov,proposal.old$mean,new.x,smalln, adaptive.c/d)
+  return(list(mean = mean, cov = new.cov))
+}
+
+adaptive.mean.var <-function(samplesize,proposal.old,new.x,smalln, adaptive.c){
+    new.mean = recursivemean_vector(proposal.old$mean, new.x, samplesize)
+    new.var = recursivecov_vector(samplesize,proposal.old$var,proposal.old$mean,new.x,smalln, adaptive.c)
+    return(list(mean = new.mean, var = new.var))
+  }
+  
+update.wrapper<-function(likelihood.n,likelihood.o,prior.o,prior.n,para.new,para.current){
+  if(log(runif(1))<(sum(likelihood.n)+prior.th.n-sum(likelihood.o)-prior.th.o)){
+    para.updated= para.new; likelihood.updated = likelihood.n; accept = TRUE
+  }else{
+    para.updated = para.current; likelihood.updated = likelihood.o;accept = FALSE
+  }
+  return(list(likelihood.updated,para.updated,accept))
+}
+mcmc<-function(model = "PH",BP=1,SR=1,distr=3,data, mcmc.setup,BP.setup,th.initial){
+  
+  #model---"AFT" or "PH" or "PO"
+  #BP--0: no Bernstein Polynomial modeling of the baseline hazard function; 1: otherwise
+  #SR--0: no random effects; 1: otherwise
+  #distr--1:Logistic distribution; 2: log-Normal distribution; 3: Weibull distribution
+ 
+  #data includes:
+           #t1--lower bound of the observed interval for failure time or observed; default is zero
+           #t2--upper bound of the observed interval for failure time or observed; default is Inf
+           #ci -- cluster indicator
+           #type--1: failure time is observed; 2: failure time is left censored; 3: failure time is
+                     #right censored; 4: failure time is interval-censored
+           #FTx--covariates for the latent failure time distribution; could be NULL
+           #crx--covariates for the cure rate 
+  
+  #mcmc.setup includes:
+           #nrun--total number of interations
+           #nskip--number of skipped interations
+           #nburn--number of burn-in interations
+  #BP setup when a Bernstein Polynomial prior (BP) is assumed 
+           #Jw--number of basis functions
+           #a.alpha and b.alpha--hyperparameters for alpha
+  
+  #th.initial--initial parameters for the centering distribution
+  browser()
+  t1 = data$t1
+  t2 = data$t2
+  type = data$type
+  FTx = data$FTx
+  crx = data$crx
+  ci = data$ci
+  m = uniqe(ci) # number of clusters
+  
+  
+  nrun = mcmc.setup$nrun
+  nburn = mcmc.setup$nburn
+  nskip = mcmc.setup$nskip
+  
+  Jw = BP.setup$Jw
+  a.alpha = BP.setup$a.alpha
+  b.alpha = BP.setup$b.alpha
+  
+  pcr = ifelse(is.null(crx),NULL, dim(crx)[2])
+  pFT = ifelse(is.null(FTx),NULL, dim(FTx)[2])
   
   #-------------------------------------------------------------------------------------------------------------#
   # Adaptive MCMC
-  indsave = 0; indsave_r=0
-  mean_th =rep(0,2); cov_th = matrix(0,ncol=2,nrow=2)
-  if(pcr>1){mean_crcoef = rep(0,pcr); cov_crcoef = matrix(0,ncol=pcr,nrow=pcr)}else{  mean_crcoef = 0; cov_crcoef = 0}
-  if(pFT>1){mean_FTcoef = rep(0,pFT); cov_FTcoef = matrix(0,ncol=pFT,nrow=pFT)}else{mean_FTcoef = 0; cov_FTcoef = 0}
-  mean_bz = rep(0,Jw-1); cov_bz = matrix(0,ncol=Jw-1,nrow=Jw-1)
-  mean_logalpha = 0; var_logalpha = 0
-  mean_phi = 0; var_phi = 0
-  mean_randomeffect = rep(0,n);cov_randomeffect = rep(0,n)
+  
+  para.updated = mcmc.init (model, distr, data, th.initial)
+  
+  
+  n.I = 100; small.n = 1.0e-6; c.n = 1000
+  theta.prop$mean =rep(0,2); theta.prop$cov = c.n*smalln*diag(2); thchain.I = array(0,dim=c(n.I,2)); 
+  if(!is.null(pcr)){crcoef.prop$mean = rep(0,pcr); crcoef.prop$cov = c.n*smalln*diag(pcr); crcoefchain.I = array(0,dim=c(n.I,pcr))}
+  if(!is.null(pFT)){FTcoef.prop$mean = rep(0,pFT); FTcoef.prop$cov = c.n*smalln*diag(pFT); FTcoefchain.I = array(0,dim=c(n.I,pFT));}
+  if(BP>0){bz.prop$mean = rep(0,Jw-1); bz.prop$cov = smalln*diag(Jw-1);  bzchain.I = array(0,dim=c(n.I,Jw-1)); 
+          logalpha.prop$mean = 0; logalpha.prop$var = c.n*smalln; alphachain.I = rep(0,n.I)
+           phi.prop$mean = 0; phi.prop$var = c.n*smalln; phichain.I = rep(0,n.I)
+  }
+  if(SR>0){crv.prop$mean = rep(0,m);crv.prop$var = c.n*rep(smalln,m); crvchain.I = array(0,dim=c(n.I,m));
+  }
+  
+   
   
   # Things to save
+  indsave = 0; 
   nsave = nrun/nskip - nburn
-  n = length(t1)/m
-  crcoefchain = array(0,dim=c(nsave,pcr)); 
-  FTcoefchain = array(0,dim=c(nsave,pFT)); 
+  if(!is.null(pcr)){crcoefchain = array(0,dim=c(nsave,pcr));} 
+  if(!is.null(pFT)){FTcoefchain = array(0,dim=c(nsave,pFT));} 
   thchain = array(0,dim=c(nsave,2)); 
-  weightchain = array(0,dim=c(nsave,Jw));
-  bzchain = array(0,dim=c(nsave,Jw-1)); 
-  alphachain = rep(0,nsave)
-  phichain = rep(0,nsave)  
-  likelihoodchain =array(0,dim=c(nsave,n)); 
-  Sigmauchain = rep(0,nsave)
-  randomeffectchain = array(0,dim=c(nrun/nskip_r-nburn_r,n)); 
-  acceptance = rep(0,n+6)
+  if(BP>0){weightchain = array(0,dim=c(nsave,Jw));
+           bzchain = array(0,dim=c(nsave,Jw-1)); 
+           alphachain = rep(0,nsave)
+  }
+  if(SR>0){
+           phichain = rep(0,nsave)  
+           sigmauchain = rep(0,nsave)
+           crvchain = array(0,dim=c(nsave,m)); 
+  }
+  acceptance = list(theta = 0, FTcoef = 0, crcoef = 0, weight = 0, alpha = 0, phi = 0, sigmau = 0, crv = rep(0,m))
+  likelihoodchain =array(0,dim=c(nsave,m));
   
-  # For computing initial covariance array
-  n_I = 100
-  crcoefchain_I = array(0,dim=c(n_I,pcr)); 
-  FTcoefchain_I = array(0,dim=c(n_I,pFT)); 
-  thchain_I = array(0,dim=c(n_I,2)); 
-  bzchain_I = array(0,dim=c(n_I,Jw-1)); 
-  alphachain_I = rep(0,n_I)
-  phichain_I = rep(0,n_I) 
-  randomeffectchain_I = array(0,dim=c(n_I,n));
   
   #MCMC iterations
   for(iscan in 2:nrun){
+    adaptive.c = 2.4^2
+    para.current = para.updated
     
-    th_o = th_c
-    crcoef_o = crcoef_c
-    FTcoef_o = FTcoef_c
-    bz_o = bz_c
-    alpha_o = alpha_c
-    phi_o = phi_c
-    cru_o = randomeffect_c
-    FTw_o = phi_c*cru_o
-    Sigma_o = Sigma_c
-    
-    smalln = 1e-6
-    if(iscan<n_I){
-      cov_th = 1000*smalln*diag(2)
-      cov_crcoef = 1000*smalln*diag(pcr)
-      cov_FTcoef = 1000*smalln*diag(pFT)
-      cov_bz = 1000*smalln*diag(Jw-1)
-      var_logalpha= 0.01
-      var_phi = 0.01
-      cov_randomeffect = rep(100*smalln,n)
-
-    }
-    if(iscan==n_I){
-      n_eff = iscan -2
-      mean_th = apply(thchain_I[1:(n_eff),], 2,mean)
-      cov_th = 2.4^2/2*cov(thchain_I[1:(n_eff),])+smalln*diag(2)
-      if(pcr>1){mean_crcoef = apply(crcoefchain_I[1:(n_eff),], 2,mean)
-      cov_crcoef = 2.4^2/pcr*cov(crcoefchain_I[1:(n_eff),])+smalln*diag(pcr)}
-      else{
-        mean_crcoef = mean(crcoefchain_I[1:(n_eff)])
-        cov_crcoef = 2.4^2*var(crcoefchain_I[1:(n_eff)])+smalln
+    if(iscan==n.I){
+      n.eff = iscan -2
+      theta.prop$mean = apply(thchain.I[1:(n.eff),], 2,mean)
+      theta.prop$cov = adaptive.c/2*cov(thchain.I[1:(n.eff),])+smalln*diag(2)
+      if(!is.null(pcr)){crcoef.prop$mean = apply(crcoefchain.I[1:(n.eff),], 2,mean); crcoef.prop$cov = adaptive.c/pcr*cov(crcoefchain.I[1:(n.eff),])+smalln*diag(pcr)}
+      if(!is.null(pFT)){FTcoef.prop$mean = apply(FTcoefchain.I[1:(n.eff),], 2,mean); FTcoef.prop$cov = adaptive.c/pFT*cov(FTcoefchain.I[1:(n.eff),])+smalln*diag(pFT)}
+      if(BP>0){
+          bz.prop$mean = apply(bzchain.I[1:(n.eff),], 2,mean)
+          bz.prop$cov = adaptive.c/(Jw-1)*cov(bzchain.I[1:(n.eff),])+smalln*diag(Jw-1)
+          logalpha.prop$mean = mean(log(alphachain.I[1:(n.eff)]))
+          logalpha.prop$var= adaptive.c*var(log(alphachain.I[1:(n.eff)]))+smalln
       }
-      if(pFT>1){mean_FTcoef = apply(FTcoefchain_I[1:(n_eff),], 2,mean)
-      cov_FTcoef = 2.4^2/pFT*cov(FTcoefchain_I[1:(n_eff),])+smalln*diag(pFT)}
-      else{
-        mean_FTcoef = mean(FTcoefchain_I[1:(n_eff)])
-        cov_FTcoef = 2.4^2*var(FTcoefchain_I[1:(n_eff)])+smalln
-      }
-      mean_bz = apply(bzchain_I[1:(n_eff),], 2,mean)
-      cov_bz = 2.4^2/(Jw-1)*cov(bzchain_I[1:(n_eff),])+smalln*diag(Jw-1)
-      mean_logalpha = mean(log(alphachain_I[1:(n_eff)]))
-      var_logalpha= 2.4^2*var(log(alphachain_I[1:(n_eff)]))+smalln
-      
       if(SR>0){
-      mean_phi = mean(phichain_I[1:(n_eff)])
-      var_phi = 2.4^2*var(phichain_I[1:(n_eff)])+smalln
-      mean_randomeffect = apply(randomeffectchain_I[1:n_eff,],2,mean)
-      cov_randomeffect = 2.4^2*apply(randomeffectchain_I[1:n_eff,],2,var)+rep(smalln,n)}
+          phi.prop$mean = mean(phichain.I[1:(n.eff)])
+          phi.prop$var = adaptive.c*var(phichain.I[1:(n.eff)])+smalln
+          crv.prop$mean = apply(crvchain.I[1:n.eff,],2,mean)
+          crv.prop$var = adaptive.c*apply(crvchain.I[1:n.eff,],2,var)+rep(smalln,m)}
      }
     
-    if(iscan>n_I){
-      n_eff = iscan -2
-      cov_th = recursivecov_vector(2,n_eff  ,cov_th,mean_th,th_c,smalln,2.4^2/2)
-      mean_th = recursivemean_vector(mean_th,th_c,n_eff ) 
-      if(pcr>1){
-      cov_crcoef = recursivecov_vector(pcr,n_eff ,cov_crcoef,mean_crcoef,crcoef_c,smalln,2.4^2/pcr)
-      mean_crcoef = recursivemean_vector(mean_crcoef,crcoef_c,n_eff)
+    if(iscan>n.I){
+      n.eff = iscan -2
+      theta.prop = adaptive.v.mean.cov(2,n.eff,theta.prop,para.current$theta,smalln,adaptive.c)
+      if(is.null(pcr)){crcoef.prop = adaptive.v.mean.cov(pcr,n.eff,crcoef.prop,para.current$crcoef,smalln,adaptive.c) }
+      if(is.null(pFT)){FTcoef.prop = adaptive.v.mean.cov(pFT,n.eff,FTcoef.prop,para.current$FTcoef,smalln,adaptive.c) }
+      if(BP>0){
+       bz.prop = adaptive.v.mean.cov(Jw-1,n.eff,bz.prop,para.current$bz,smalln,adaptive.c) 
+       logalpha.prop = adaptive.mean.var(n.eff,logalpha.prop,para.current$logalpha,smalln,adaptive.c) 
       }
-      else{
-      cov_crcoef = recursivecov(n_eff ,cov_crcoef,mean_crcoef,crcoef_c,smalln,2.4^2/pcr)
-      mean_crcoef = recursivemean(mean_crcoef,crcoef_c,n_eff)
-      }
-      if(pFT>1){cov_FTcoef = recursivecov_vector(pFT,n_eff ,cov_FTcoef,mean_FTcoef,FTcoef_c,smalln,2.4^2/pFT)
-      mean_FTcoef = recursivemean_vector(mean_FTcoef,FTcoef_c,n_eff)
-      }
-      else{
-        cov_FTcoef = recursivecov(n_eff ,cov_FTcoef,mean_FTcoef,FTcoef_c,smalln,2.4^2/pFT)
-        mean_FTcoef = recursivemean(mean_FTcoef,FTcoef_c,n_eff)
-      }
-      cov_bz = recursivecov_vector(Jw-1,n_eff ,cov_bz,mean_bz,bz_c,smalln,2.4^2/(Jw-1))
-      mean_bz = recursivemean_vector(mean_bz,bz_c,n_eff)
-      var_logalpha = recursivecov(n_eff ,var_logalpha,mean_logalpha,log(alpha_c),smalln,2.4^2)
-      mean_logalpha = recursivemean(mean_logalpha,log(alpha_c),n_eff)
       if(SR>0){
-      var_phi = recursivecov(n_eff ,var_phi,mean_phi,phi_c,smalln,2.4^2)
-      mean_phi = recursivemean(mean_phi,phi_c,n_eff)
-      for(i in 1:n){
-        cov_randomeffect[i] = recursivecov(n_eff ,cov_randomeffect[i],mean_randomeffect[i],randomeffect_c[i],smalln,2.4^2)
-        mean_randomeffect[i] = recursivemean(mean_randomeffect[i],randomeffect_c[i],n_eff)
-        }
+      phi.prop = adaptive.mean.var(n.eff,phi.prop,para.current$phi,smalln,adaptive.c) 
+      for(i in 1:m){
+        crvi.prop = list(mean = crv.prop$mean[i],var =  crv.prop$var[i])
+        crvi.prop = adaptive.mean.var(n.eff,crvi.prop,para.current$crv$crv[i],smalln,adaptive.c) 
+        crv.prop$mean[i]=crvi.prop$mean
+        crv.prop$var[i]=crvi.prop$var
+         }
     }}
     
-    if(dimFTcoef>0){FXbeta_o = produ(FTx,FTcoef_o)}else{FXbeta_o=rep(0,n*m)}
-    crXbeta_o = produ(crx,crcoef_o)
-    z_o = bz_o
-    weight_o = Ys_to_weight(z_o)
-    
-    #cru_o = cru_o-mean(cru_o) #mean constraint
-    crv_o = rep(cru_o,each=m);Fv_o = phi_o*crv_o;
-    missingM =  missing_impute_t( model, BP, distr,maxc,t1, t2,type, th_o[1], th_o[2], weight_o, FXbeta_o,Fv_o,crXbeta_o,crv_o)
-    
+    likelihood.c = likelihood.wrapper(model,BP,distr,data,para.current)$likelihoodsum
+                                 
     #update theta
-    likelihood_o = likelihoodv(model, BP,m, t1, t2, type, th_o[1], th_o[2], weight_o, distr, FXbeta_o, Fv_o, crXbeta_o, crv_o, missingM) 
-    prior_th_o = log_dnorm (th_o, pmean_th, pcov_th,2)
-    th_n = rmnorm(th_o,cov_th)
-    likelihood_n = likelihoodv(model, BP,m, t1, t2, type, th_n[1], th_n[2], weight_o, distr, FXbeta_o, Fv_o, crXbeta_o, crv_o, missingM) 
-    prior_th_n = log_dnorm (th_n, pmean_th, pcov_th,2)
+    para.new = para.current
+    prior.c = log.dnorm (para.current$theta, para.current$theta.mean, para.current$theta.cov,2)
+    para.new$theta = rmnorm(para.current$theta,theta.prop$cov)
+    likelihood.n = likelihood.wrapper(model,BP,distr,data,para.new)$likelihoodsum
+    prior.n = log.dnorm (para.new$theta, para.current$theta.mean, para.current$theta.cov,2)
+    theta.result = update.wrapper(likelihood.n,likelihood.c,prior.c,prior.n,para.new,para.current)
     
-    if(log(runif(1))<(sum(likelihood_n)+prior_th_n-sum(likelihood_o)-prior_th_o)){
-      th_c = th_n; likelihood_s = likelihood_n; acceptance[1] = acceptance[1]+1
-    }else{
-      th_c = th_o; likelihood_s = likelihood_o;
-    }
+    likelihood.c = theta.result$likelihood.updated
+    para.current = theta.result$para.updated
+    acceptance$theta = isTRUE(theta.result$accept)+1
+    
+    
     
     if(BP>0){
       #update weight parameters bz
-      likelihood_o = likelihood_s
-      prior_weight_o = alpha_o*sum(log(weight_o))
-      bz_n = rmnorm(bz_o,cov_bz)
-      z_n = bz_n;weight_n = Ys_to_weight(z_n)
-      likelihood_n = likelihoodv(model, BP,m, t1, t2, type, th_c[1], th_c[2], weight_n, distr, FXbeta_o, Fv_o, crXbeta_o, crv_o, missingM) 
-      prior_weight_n = alpha_o*sum(log(weight_n))
+      para.new = para.current
+      prior.c = para.current$alpha*sum(log(Ys_to_weight(para.current$bz)))
+      para.new$bz = rmnorm(para.current$bz,bz.prop$cov)
+      likelihood.n = likelihood.wrapper(model,BP,distr,data,para.new)$likelihoodsum
+      prior.n = lpara.current$alpha*sum(log(Ys_to_weight(para.new$bz)))
+      bz.result = update.wrapper(likelihood.n,likelihood.c,prior.c,prior.n,para.new,para.current)
       
-      if(log(runif(1))<(sum(likelihood_n)+prior_weight_n-sum(likelihood_o)-prior_weight_o)){
-        bz_c = bz_n; weight_c = weight_n; likelihood_s = likelihood_n; acceptance[2] = acceptance[2]+1
-      }else{
-        bz_c = bz_o; weight_c = weight_o; likelihood_s = likelihood_o;
-      }
+      likelihood.c = bz.result$likelihood.updated
+      para.current = bz.result$para.updated
+      acceptance$bz = isTRUE(bz.result$accept)+1
       
       #update alpha
-      z_c = bz_c
-      weight_c = Ys_to_weight(z_c)
-      prior_alpha_o = lgamma(alpha_o*Jw)-Jw*lgamma(alpha_o)+sum((alpha_o-1)*log(weight_c))+(a_alpha-1)*log(alpha_o)-b_alpha*alpha_o
-      alpha_n = exp(rnorm(1,log(alpha_o),sqrt(var_logalpha)))
-      prior_alpha_n = lgamma(alpha_n*Jw)-Jw*lgamma(alpha_n)+sum((alpha_n-1)*log(weight_c))+(a_alpha-1)*log(alpha_n)-b_alpha*alpha_n
-      if(log(runif(1))<(prior_alpha_n-prior_alpha_o)){
-        alpha_c = alpha_n; acceptance[3] = acceptance[3]+1
+      z.c = bz.c
+      weight.c = Ys.to.weight(para.current$bz)
+      alpha.o = para.current$alpha
+      prior.alpha.o = lgamma(alpha.o*Jw)-Jw*lgamma(alpha.o)+sum((alpha.o-1)*log(weight.c))+(a.alpha-1)*log(alpha.o)-b.alpha*alpha.o
+      alpha.n = exp(rnorm(1,log(alpha.o),sqrt(var.logalpha)))
+      prior.alpha.n = lgamma(alpha.n*Jw)-Jw*lgamma(alpha.n)+sum((alpha.n-1)*log(weight.c))+(a.alpha-1)*log(alpha.n)-b.alpha*alpha.n
+      if(log(runif(1))<(prior.alpha.n-prior.alpha.o)){
+        para.current$alpha = alpha.n; acceptance$alpha = acceptance$alpha+1
       }else{
-        alpha_c = alpha_o; 
+        para.current$alpha = alpha.o; 
       }
-    }else{
-      weight_c = rep(1/Jw,Jw);
     }
 
     #update crcoef parameters 
-    likelihood_o = likelihood_s
-    prior_crcoef_o = -t(crcoef_o)%*%(crcoef_o)/3^2/2
-    if(pcr>1){crcoef_n = rmnorm(crcoef_o,cov_crcoef)}else{crcoef_n = rnorm(1,crcoef_o,sqrt(cov_crcoef))}
-    crXbeta_n = produ(crx,crcoef_n)
-    likelihood_n = likelihoodv(model, BP,m, t1, t2, type, th_c[1], th_c[2], weight_c, distr, FXbeta_o, Fv_o, crXbeta_n, crv_o, missingM) 
-    prior_crcoef_n = -t(crcoef_n)%*%(crcoef_n)/3^2/2
+    if(!is.null(pcr)){
+    para.new = para.current
+    prior.crcoef.o = -t(para.current$crcoef)%*%(para.current$crcoef)/5^2/2
+    para.new$crcoef = ifelse(pcr==1, rnorm(1,para.current$crcoef,sqrt(crcoef.prop$cov)), rmnorm(para.current$crcoef,crcoef.prop$cov))
+    likelihood.n = likelihood.wrapper(model,BP,distr,data,para.new)$likelihoodsum
+    prior.n = -t(para.new$crcoef)%*%(para.new$crcoef)/5^2/2
+    crcoef.result = update.wrapper(likelihood.n,likelihood.c,prior.c,prior.n,para.new,para.current)
+    likelihood.c = crcoef.result$likelihood.updated
+    para.current = crcoef.result$para.updated
+    acceptance$crcoef = isTRUE(crcoef.result$accept)+1
+    }
     
-    if(log(runif(1))<(sum(likelihood_n)+prior_crcoef_n[1]-sum(likelihood_o)-prior_crcoef_o[1])){
-      crcoef_c = crcoef_n; crXbeta_c = crXbeta_n; likelihood_s = likelihood_n; acceptance[4] = acceptance[4]+1
-    }else{
-      crcoef_c = crcoef_o; crXbeta_c = crXbeta_o; likelihood_s = likelihood_o;
-    }
-   
     #update FTcoef parameters 
-    if(dimFTcoef>0){
-      likelihood_o = likelihood_s
-      prior_FTcoef_o = -t(FTcoef_o)%*%(FTcoef_o)/10^2/2
-      if(pFT>1){FTcoef_n = rmnorm(FTcoef_o,cov_FTcoef)}else{FTcoef_n = rnorm(1,FTcoef_o,sqrt(cov_FTcoef))}
-      FXbeta_n = produ(FTx,FTcoef_n)
-      likelihood_n = likelihoodv(model, BP,m, t1, t2, type, th_c[1], th_c[2], weight_c, distr, FXbeta_n, Fv_o, crXbeta_c, crv_o, missingM) 
-      prior_FTcoef_n = -t(FTcoef_n)%*%(FTcoef_n)/10^2/2
-      
-      if(log(runif(1))<(sum(likelihood_n)+prior_FTcoef_n-sum(likelihood_o)-prior_FTcoef_o)){
-        FTcoef_c = FTcoef_n; FXbeta_c = FXbeta_n;likelihood_s = likelihood_n; acceptance[5] = acceptance[5]+1
-      }else{
-        FTcoef_c = FTcoef_o; FXbeta_c = FXbeta_o;likelihood_s = likelihood_o;
-      }
-    }else{
-      FTcoef_c = 0
-      FXbeta_c = rep(0,n*m)
+    if(!is.null(pFT)){
+      para.new = para.current
+      prior.FTcoef.o = -t(para.current$FTcoef)%*%(para.current$FTcoef)/5^2/2
+      para.new$FTcoef = ifelse(pT==1, rnorm(1,para.current$FTcoef,sqrt(FTcoef.prop$cov)), rmnorm(para.current$FTcoef,FTcoef.prop$cov))
+      likelihood.n = likelihood.wrapper(model,BP,distr,data,para.new)$likelihoodsum
+      prior.n = -t(para.new$FTcoef)%*%(para.new$FTcoef)/5^2/2
+      FTcoef.result = update.wrapper(likelihood.n,likelihood.c,prior.c,prior.n,para.new,para.current)
+      likelihood.c = FTcoef.result$likelihood.updated
+      para.current = FTcoef.result$para.updated
+      acceptance$FTcoef = isTRUE(FTcoef.result$accept)+1
     }
-  
     
     if(SR>0){
+      
     #update random effects
-    likelihood_o = likelihood_s
-    invsigmastar = 1/Sigma_o
-    temp = samplerandomeffect(FTw_o, cru_o, cov_randomeffect,phi_o, n)
-    FTw_n = temp[,1]; cru_n = temp[,2]
-    crv_n = rep(cru_n,each=m);Fv_n = phi_o*crv_n;
-    likelihood_n = likelihoodv(model, BP,m, t1, t2, type, th_c[1], th_c[2], weight_c, distr, FXbeta_c, Fv_n, crXbeta_c, crv_n, missingM) 
-    tempmatrix=randomeffect (cru_o,cru_n,likelihood_o,likelihood_n,invsigmastar,n,m)
-    randomeffect_c=tempmatrix[1,]
-    randomeffect_c = randomeffect_c-mean(randomeffect_c) #center
-    acceptance[5:(n+4)] = tempmatrix[2,]+acceptance[6:(n+5)]
-    cru_c = randomeffect_c
-    crv_c = rep(cru_c,each=m);
-    Fv_oc = phi_o*crv_c;
-    
-    #update Sigma_u
-    
-    a_u=2
-    zetasq_u=10
-    Lambdau= sampleLambda(a_u, zetasq_u, Sigma_o)
-    Sigma_c = samplesigma(n, a_u, cru_c, Lambdau)
+    likelihood.cv = likelihood.wrapper(model,BP,distr,data,para.current)
+    para.new = para.current
+    para.new$crv = samplerancrv(para.current$crv, crv.prop$var, m)
+    para.new$FTv = para.new$phi* para.new$crv
+    likelihood.nv = likelihood.wrapper(model,BP,distr,data,para.new)
+    prior.c = -para.current$crv^2/para.current$sigma^2/2
+    prior.n = -para.new$crv^2/para.new$sigma^2/2
+    eval.v = (prior.n+likelihood.nv$likelihoodi)>(prior.c+likelihood.cv$likelihoodi)
+    para.current$crv = ifelse(eval_v,para.new$crv,para.current$crv)
+    acceptance$crv = ifelse(eval_v,acceptance$crv,acceptance$crv+1)
     
     
+    #update sigma.u
+    Lambda= sampleLambda(a = 2, zetasq = 10^3, para.current$sigma)
+    para.current$sigma = samplesigma(n, a=2, para.current$crv, Lambda)
     
     #update phi
-    phi_n = rnorm(1,phi_o,sqrt(var_phi))
-    Fv_c = phi_n*crv_c;
-    prior_phi_o = -phi_o^2/2/9
-    prior_phi_n = -phi_n^2/2/9
-    likelihood_o = likelihoodv(model, BP,m, t1, t2, type, th_c[1], th_c[2], weight_c, distr, FXbeta_c, Fv_oc, crXbeta_c, crv_c, missingM) 
-    likelihood_n = likelihoodv(model, BP,m, t1, t2, type, th_c[1], th_c[2], weight_c, distr, FXbeta_c, Fv_c, crXbeta_c, crv_c, missingM)
-    if(log(runif(1))<(sum(likelihood_n)+prior_phi_n-sum(likelihood_o)-prior_phi_o)){
-      phi_c = phi_n;acceptance[n+6] = acceptance[n+6]+1;likelihood_s=likelihood_n
-    }else{phi_c=phi_o;likelihood_s=likelihood_o}
-    }else{
-      randomeffect_c = matrix(rep(0,n),ncol=n,byrow=TRUE)
+    para.new = para.current
+    para.new$phi = rnorm(1,para.current$phi,sqrt(phi.prop$var))
+    para.new$FTv = para.new$phi*para.new$crv;
+    prior.c = - para.current$phi^2/25/2
+    prior.n = - para.new$phi^2/25/2
+    likelihood.c = likelihood.wrapper(model,BP,distr,data,para.current)$likelihoodsum 
+    likelihood.n = likelihood.wrapper(model,BP,distr,data,para.new)$likelihoodsum 
+    phi.result = update.wrapper(likelihood.n,likelihood.c,prior.c,prior.n,para.new,para.current)
+    likelihood.c = phi.result$likelihood.updated
+    para.current = phi.result$para.updated
+    para.current$FTv = para.current$phi*para.current$crv
+    acceptance$phi= isTRUE(phi.result$accept)+1
     }
     
-    #print(cbind(iscan,indsave,sum(likelihood_s),alpha_c,acceptance[1]))
-    if(iscan<=n_I){
-      crcoefchain_I[iscan-1,] = crcoef_c; 
-      FTcoefchain_I[iscan-1,] = FTcoef_c; 
-      thchain_I[iscan-1,] = th_c; 
-      bzchain_I[iscan-1,] = bz_c; 
-      alphachain_I[iscan-1] = alpha_c
-      phichain_I[iscan-1] = phi_c 
-      randomeffectchain_I[iscan-1,] = randomeffect_c; 
+    
+    #print(cbind(iscan,indsave,sum(likelihood.s),alpha.c,acceptance[1]))
+    if(iscan<=n.I){
+      crcoefchain.I[iscan-1,] = crcoef.c; 
+      FTcoefchain.I[iscan-1,] = FTcoef.c; 
+      thchain.I[iscan-1,] = th.c; 
+      bzchain.I[iscan-1,] = bz.c; 
+      alphachain.I[iscan-1] = alpha.c
+      phichain.I[iscan-1] = phi.c 
+      crvchain.I[iscan-1,] = crv.c; 
       
     }
     
     if(iscan%%nskip==0 && iscan>nskip*nburn){
       indsave = indsave +1
-      #print(cbind(iscan,indsave,sum(likelihood_s),alpha_c,phi_c,acceptance[1]))
-      crcoefchain[indsave,] = crcoef_c; 
-      FTcoefchain[indsave,] = FTcoef_c; 
-      thchain[indsave,] = th_c; 
-      weightchain[indsave,] = weight_c; 
-      bzchain[indsave,] = bz_c
-      alphachain[indsave] = alpha_c
-      phichain[indsave] = phi_c 
-      Sigmauchain[indsave] = Sigma_c
-      likelihoodchain[indsave,] = likelihood_s
+      #print(cbind(iscan,indsave,sum(likelihood.s),alpha.c,phi.c,acceptance[1]))
+      crcoefchain[indsave,] = para.current$crcoef; 
+      FTcoefchain[indsave,] = para.current$FTcoef; 
+      thetachain[indsave,] = para.current$theta; 
+      weightchain[indsave,] = Ys.to.weight(para.current$bz); 
+      bzchain[indsave,] = para.current$bz
+      alphachain[indsave] = para.current$alpha
+      phichain[indsave] = para.current$phi 
+      sigmauchain[indsave] = para.current$sigma
+      likelihoodchain[indsave,] = likelihood.c
     }
-    
-    if(iscan%%nskip_r==0 && iscan>nskip_r*nburn_r){
-      indsave_r = indsave_r +1
-      randomeffectchain[indsave_r,] = randomeffect_c; 
-      print(cbind(iscan,indsave,sum(likelihood_s)))
-    }
-    
   }
   #Compute WAIC
   lppd = sum(log(apply(exp(likelihoodchain),2,mean)))
@@ -332,9 +399,9 @@ mcmc<-function(model,distr,maxc,t1,t2,type,m,BP,SR,crx,FTx,dimFTcoef,nrun,nskip,
                weight = weightchain,
                bz = bzchain,
                alpha = alphachain,
-               random_effect = randomeffectchain,
+               random.effect = crvchain,
                likelihood = likelihoodchain,
-               sigma = Sigmauchain,
+               sigma = sigmauchain,
                phi = phichain,
                acceptance = acceptance,
                lppd = lppd,

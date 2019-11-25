@@ -1,9 +1,8 @@
-setwd("~/Dropbox/research/Active/Dipankar/Cure rate model with frailty/Analysis/Data/BP/Ht")
 source('MCMC_BP_univariateRE.R')
 
 #---------------------------------------------------------------------------------------------------#
 # Model setup
-n = 10;m = 20; model = "PH";distr=1;BP=1
+m = 30; n = 10; model = "PH";distr=1;BP=1
 crcoef_s = c(-1,0.2);pcr = 2;FTcoef_s = c(0.5,-0.5);pFT=2;phi_s = 0.3
 #    n---number of individuals under study.
 #    m---number of units within each individual.
@@ -32,38 +31,38 @@ sigmau = 0.25
 
 
 cru_s = rep(0,n);FTw_s = rep(0,n)
-for(i in 1:n){
+for(i in 1:m){
   cru_s[i] = rnorm(1,0,sqrt(sigmau))
   FTw_s[i] = phi_s*cru_s[i]
 }
+
 #    cru---cure rate random effects, sampled from multivariate normal with mean zero and covariance sigmau.
 #    FTw---latent distribution random effects
-nt = sampleTs(model,n,m,crx, rep(cru_s,each=m),crcoef_s, FTx,FTcoef_s, rep(FTw_s,each=m))
-type=rep(0,n*m)
+nt = sampleTs(model,n,m,crx, rep(cru_s,each=n),crcoef_s, FTx,FTcoef_s, rep(FTw_s,each=n))
+type=rep(0,n*m);ci = rep(seq(1,m,1),each = n)
 
-ind = 1;t1=rep(0,n*m);t2=rep(0,n*m);censortu=NULL;censortl=NULL
+#t1--lower bound of the observed interval for failure time or observed; default is zero
+#t2--upper bound of the observed interval for failure time or observed; default is Inf
+
+ind = 1;t1=rep(0,n*m);t2=rep(Inf,n*m);censortu=NULL;censortl=NULL
 for(i in 1:(n*m)){
   censortu[i] = 20
   censortl[i] = rexp(1,1)/10
-  if(runif(1)<0.001){type[i]=5}
-  else{
-    if(nt[i]<censortl[i]){type[i]=2;t2[i]=censortl[i]}
+   if(nt[i]<censortl[i]){type[i]=2;t2[i]=censortl[i]}
     if(nt[i]>censortu[i]){type[i]=3;t1[i]=censortu[i]}
     if(nt[i]<censortu[i] && nt[i]>censortl[i]){
-      if(runif(1)<0.9){type[i] = 1;t1[i]=nt[i]}
+      if(runif(1)<0.6){type[i] = 1;t1[i]=nt[i];t2 = nt[i]}
       else{type[i] = 4;t1[i]=censortl[i];t2[i]=censortu[i]}
       }
-  }
+
 }
 
-#Setup for MCMC
-nrun =10000 ; nskip = 5;nskip_r=50; nburn=1000;nburn_r = 40;Jw=20;a_alpha = 1; b_alpha=1;maxc = 15;BP=1;distr=1;SR=1
-#    FTJ--number of level for the tail-free process
-#    nrun--- total number of iterations
-
+data = list(t1 = t1, t2 = t2,type = type, FTx = FTx, crx = crx, ci = ci)
+mcmc.setup = list(nrun = 40000, nburn = 1000, nskip = 5)
+BP.setup = list(Jw = 20, a.alpha = 1, b.alpha=1)
 th_initial=c(-2,0.5)
 
-simulresult<-mcmc(model,distr,maxc,t1,t2,type,m,BP,SR,crx,FTx,1,nrun,nskip,nskip_r,nburn,nburn_r,Jw,a_alpha,b_alpha,th_initial)
+simulresult<-mcmc(model = "PH",BP=1,SR=1,distr=3,data,mcmc.setup,BP.setup,th.initial)
 
 par(mfrow=c(3,3))
 plot(simulresult$theta[,1],type="l",ylab=expression(theta[1]),xlab="iteration")

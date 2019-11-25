@@ -1,4 +1,3 @@
-setwd("~/Dropbox/research/Active/Dipankar/Analysis/Data/BP/Ht")
 source('MCMC_BP_multivariateRE.R')
 
 #---------------------------------------------------------------------------------------------------#
@@ -34,12 +33,12 @@ sigmau = cbind(c(0.5,0),c(0,0.5))
 
 
 cru_s = rep(0,n*d_r);FTw_s = rep(0,n*d_r)
-for(i in 1:n){
-  seqi = ((i-1)*d_r+1):(i*d_r)
-  if(d_r>1){  cru_s[seqi] = rmnorm(rep(0,d_r), sigmau)}
-  else{  cru_s[seqi] = rnorm(1,0,sigmau)}
-  FTw_s[seqi] = phi_s*cru_s[seqi]
-}
+#for(i in 1:n){
+#  seqi = ((i-1)*d_r+1):(i*d_r)
+# if(d_r>1){  cru_s[seqi] = rmnorm(rep(0,d_r), sigmau)}
+#  else{  cru_s[seqi] = rnorm(1,0,sigmau)}
+#  FTw_s[seqi] = phi_s*cru_s[seqi]
+#}
 #    cru---cure rate random effects, sampled from multivariate normal with mean zero and covariance sigmau.
 #    FTw---latent distribution random effects
 nt = sampleTs(model,n,m,d_r,crx, cru_s,crcoef_s, FTx,FTcoef_s, FTw_s,Randomx)
@@ -59,7 +58,8 @@ for(i in 1:(n*m)){
 }
 
 #Setup for MCMC
-nrun =50000 ; nskip = 5;nskip_r=50; nburn=1000;nburn_r = 100;Jw=20;a_alpha = 1; b_alpha=1;maxc = 15;BP=1;distr=1;SR=1
+nrun =50000 ; nskip = 5;nskip_r=50; nburn=1000;nburn_r = 100;Jw=20;a_alpha = 1; b_alpha=1;
+maxc = 15;BP=1;distr=1;SR=0
 #    FTJ--number of level for the tail-free process
 #    nrun--- total number of iterations
 
