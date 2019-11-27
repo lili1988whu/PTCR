@@ -38,12 +38,14 @@ likelihood.wrapper<-function(model,BP,distr,data,parameters){
   Fv = parameters$Fv[ci]
   crv = parameters$crv[ci]
   
-  dimFTcoef = ifelse(is.null(dim(FTx)),NULL,dim(FTx)[2])
-  FTbeta = ifelse(is.null(dimFTcoef), rep(0,length(ci)), produ(FTx,FTcoef))
-  dimcrcoef = ifelse(is.null(dim(crx)),NULL,dim(crx)[2])
-  crXbeta = ifelse(is.null(dimcrcoef), rep(0,length(ci)), produ(crx,crcoef)) 
-  weight = Ys.to.weight(z)
-  likelihoodall = likelihoodv(model,BP, t1,  t2, type, th1, th2, w, distr, FXbeta, Fv, crXbeta, crv)
+  dimFTcoef = if(is.null(dim(FTx))) NULL else dim(FTx)[2]
+  FXbeta = if(is.null(dimFTcoef))  rep(0,length(ci)) else produ(FTx,FTcoef)
+  dimcrcoef = if(is.null(dim(crx))) NULL else dim(crx)[2]
+  crXbeta = if (is.null(dimcrcoef)) rep(0,length(ci)) else produ(crx,crcoef)
+  weight = Ys_to_weight(z)
+  
+ 
+  likelihoodall = likelihoodv(model,BP, t1,  t2, type, th1, th2, weight, distr, FXbeta, Fv, crXbeta, crv)
   tempdata = data.frame(likelihoodall,ci)
   likelihoodi = as.vector(tapply(tempdata$likelihoodall,INDEX = tempdata$ci, FUN = sum))
   likelihoodsum = sum( likelihoodall)  
@@ -61,6 +63,7 @@ mcmc.init <- function (model = "PH", distr=3, data, th.initial){
            #right censored; 4: failure time is interval-censored
        #FTx--covariates for the latent failure time distribution; could be NULL
        #crx--covariates for the cure rate 
+  
   t1 = data$t1
   t2 = data$t2
   type = data$type
@@ -68,19 +71,19 @@ mcmc.init <- function (model = "PH", distr=3, data, th.initial){
   crx = data$crx
   ci = data$ci
   m = unique(ci)
-  pcr = ifelse(is.null(crx),NULL, dim(crx)[2])
-  pFT = ifelse(is.null(FTx),NULL, dim(FTx)[2])
+  pcr = if(is.null(crx)) NULL else dim(crx)[2]
+  pFT = if(is.null(FTx)) NULL else dim(FTx)[2]
   #Parametric fit to obtain priors for theta
   likelihoodoptim<-function(pa.input){
     #pa.input includes  
     #th1, th2--parameters of the centering distribution
     #FTcoef--coefficients for FTx; could be NULL
     #crcoef--coefficients for crx
-    
+    parameters = list()
     parameters$th1 = pa.input[1];  parameters$th2 = pa.input[2]
-    parameters$crcoef = ifelse(is.null(pcr), NULL,pa.input[3:(pcr+2)])
-    templength = ifelse(is.null(pcr),2,pcr+2)
-    parameters$FTcoef = ifelse(is.null(pFT), NULL,pa.input[(templength+3):(templength+pFT)])
+    parameters$crcoef = if(is.null(pcr)) NULL else pa.input[3:(pcr+2)]
+    templength = if(is.null(pcr)) 2 else pcr+2
+    parameters$FTcoef = if(is.null(pFT)) NULL else pa.input[(templength+1):(templength+pFT)]
     parameters$z = c(0,0)
     parameters$Fv = rep(0,length(t1))
     parameters$crv = rep(0,length(t1))
@@ -88,7 +91,8 @@ mcmc.init <- function (model = "PH", distr=3, data, th.initial){
     return(-p);
   }
   
-  parastart = ifelse(is.null(pFT), c(th.initial,rep(0,pcr)),c(th.initial,rep(0,pcr),rep(0,pFT)))
+  parastart = if(is.null(pFT)) c(th.initial,rep(0,pcr)) else c(th.initial,rep(0,pcr),rep(0,pFT))
+  browser()
   fit = optim(par=parastart,likelihoodoptim,hessian="TRUE")
   
   #--------------------------------------------------------------------#
@@ -96,13 +100,13 @@ mcmc.init <- function (model = "PH", distr=3, data, th.initial){
   #-------------------------------------------------------------------------------------------------------------#
   pmean.th = fit$par[1:2]; pcov.th = 0.001*fit$hessian[1:2,1:2]
   crcoef  = fit$par[3:(pcr+2)]
-  FTcoef  = ifelse(is.null(pFT), NULL,fit$par[(pcr+3):(pcr+2+pFT)])
+  FTcoef  = if (is.null(pFT)) NULL else fit$par[(pcr+3):(pcr+2+pFT)]
   bz  = rep(0,Jw-1)
   sigma  = 0.2
   phi  = 0.3
   alpha  = 0.5
-  Fv  = ifelse(SR>0, rnorm(n,0,0.01),rep(0,m))
-  crv  = ifelse(SR>0, rnorm(n,0,0.01),rep(0,m))
+  Fv  = if (SR>0) rnorm(n,0,0.01) else rep(0,m)
+  crv  = if (SR>0) rnorm(n,0,0.01) else rep(0,m)
   
   return(list(theta = pmean.th, theta.mean = pmean.th, theta.cov = pcov.th, crcoef = crcoef, 
               FTcoef = FTcoef, bz = bz, sigma = sigma, phi = phi, 
@@ -155,14 +159,14 @@ mcmc<-function(model = "PH",BP=1,SR=1,distr=3,data, mcmc.setup,BP.setup,th.initi
            #a.alpha and b.alpha--hyperparameters for alpha
   
   #th.initial--initial parameters for the centering distribution
-  browser()
+  
   t1 = data$t1
   t2 = data$t2
   type = data$type
   FTx = data$FTx
   crx = data$crx
   ci = data$ci
-  m = uniqe(ci) # number of clusters
+  m = unique(ci) # number of clusters
   
   
   nrun = mcmc.setup$nrun
@@ -173,12 +177,12 @@ mcmc<-function(model = "PH",BP=1,SR=1,distr=3,data, mcmc.setup,BP.setup,th.initi
   a.alpha = BP.setup$a.alpha
   b.alpha = BP.setup$b.alpha
   
-  pcr = ifelse(is.null(crx),NULL, dim(crx)[2])
-  pFT = ifelse(is.null(FTx),NULL, dim(FTx)[2])
+  pcr = if (is.null(crx)) NULL else dim(crx)[2]
+  pFT = if(is.null(FTx)) NULL else dim(FTx)[2]
   
   #-------------------------------------------------------------------------------------------------------------#
   # Adaptive MCMC
-  
+  browser()
   para.updated = mcmc.init (model, distr, data, th.initial)
   
   
@@ -288,7 +292,7 @@ mcmc<-function(model = "PH",BP=1,SR=1,distr=3,data, mcmc.setup,BP.setup,th.initi
       
       #update alpha
       z.c = bz.c
-      weight.c = Ys.to.weight(para.current$bz)
+      weight.c = Ys_to_weight(para.current$bz)
       alpha.o = para.current$alpha
       prior.alpha.o = lgamma(alpha.o*Jw)-Jw*lgamma(alpha.o)+sum((alpha.o-1)*log(weight.c))+(a.alpha-1)*log(alpha.o)-b.alpha*alpha.o
       alpha.n = exp(rnorm(1,log(alpha.o),sqrt(var.logalpha)))
@@ -304,7 +308,7 @@ mcmc<-function(model = "PH",BP=1,SR=1,distr=3,data, mcmc.setup,BP.setup,th.initi
     if(!is.null(pcr)){
     para.new = para.current
     prior.crcoef.o = -t(para.current$crcoef)%*%(para.current$crcoef)/5^2/2
-    para.new$crcoef = ifelse(pcr==1, rnorm(1,para.current$crcoef,sqrt(crcoef.prop$cov)), rmnorm(para.current$crcoef,crcoef.prop$cov))
+    para.new$crcoef = if(pcr==1) rnorm(1,para.current$crcoef,sqrt(crcoef.prop$cov)) else rmnorm(para.current$crcoef,crcoef.prop$cov)
     likelihood.n = likelihood.wrapper(model,BP,distr,data,para.new)$likelihoodsum
     prior.n = -t(para.new$crcoef)%*%(para.new$crcoef)/5^2/2
     crcoef.result = update.wrapper(likelihood.n,likelihood.c,prior.c,prior.n,para.new,para.current)
@@ -317,7 +321,7 @@ mcmc<-function(model = "PH",BP=1,SR=1,distr=3,data, mcmc.setup,BP.setup,th.initi
     if(!is.null(pFT)){
       para.new = para.current
       prior.FTcoef.o = -t(para.current$FTcoef)%*%(para.current$FTcoef)/5^2/2
-      para.new$FTcoef = ifelse(pT==1, rnorm(1,para.current$FTcoef,sqrt(FTcoef.prop$cov)), rmnorm(para.current$FTcoef,FTcoef.prop$cov))
+      para.new$FTcoef = if(pT==1) rnorm(1,para.current$FTcoef,sqrt(FTcoef.prop$cov)) else rmnorm(para.current$FTcoef,FTcoef.prop$cov)
       likelihood.n = likelihood.wrapper(model,BP,distr,data,para.new)$likelihoodsum
       prior.n = -t(para.new$FTcoef)%*%(para.new$FTcoef)/5^2/2
       FTcoef.result = update.wrapper(likelihood.n,likelihood.c,prior.c,prior.n,para.new,para.current)
@@ -337,8 +341,8 @@ mcmc<-function(model = "PH",BP=1,SR=1,distr=3,data, mcmc.setup,BP.setup,th.initi
     prior.c = -para.current$crv^2/para.current$sigma^2/2
     prior.n = -para.new$crv^2/para.new$sigma^2/2
     eval.v = (prior.n+likelihood.nv$likelihoodi)>(prior.c+likelihood.cv$likelihoodi)
-    para.current$crv = ifelse(eval_v,para.new$crv,para.current$crv)
-    acceptance$crv = ifelse(eval_v,acceptance$crv,acceptance$crv+1)
+    para.current$crv = if(eval_v)para.new$crv else para.current$crv
+    acceptance$crv = if(eval_v)acceptance$crv else acceptance$crv+1
     
     
     #update sigma.u
@@ -379,7 +383,7 @@ mcmc<-function(model = "PH",BP=1,SR=1,distr=3,data, mcmc.setup,BP.setup,th.initi
       crcoefchain[indsave,] = para.current$crcoef; 
       FTcoefchain[indsave,] = para.current$FTcoef; 
       thetachain[indsave,] = para.current$theta; 
-      weightchain[indsave,] = Ys.to.weight(para.current$bz); 
+      weightchain[indsave,] = Ys_to_weight(para.current$bz); 
       bzchain[indsave,] = para.current$bz
       alphachain[indsave] = para.current$alpha
       phichain[indsave] = para.current$phi 

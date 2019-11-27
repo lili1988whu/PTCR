@@ -2,7 +2,7 @@ source('MCMC_BP_univariateRE.R')
 
 #---------------------------------------------------------------------------------------------------#
 # Model setup
-m = 30; n = 10; model = "PH";distr=1;BP=1
+m = 30; n = 10; model = "PH";distr=3;BP=1
 crcoef_s = c(-1,0.2);pcr = 2;FTcoef_s = c(0.5,-0.5);pFT=2;phi_s = 0.3
 #    n---number of individuals under study.
 #    m---number of units within each individual.
@@ -47,11 +47,11 @@ type=rep(0,n*m);ci = rep(seq(1,m,1),each = n)
 ind = 1;t1=rep(0,n*m);t2=rep(Inf,n*m);censortu=NULL;censortl=NULL
 for(i in 1:(n*m)){
   censortu[i] = 20
-  censortl[i] = rexp(1,1)/10
+  censortl[i] = rexp(1,1)
    if(nt[i]<censortl[i]){type[i]=2;t2[i]=censortl[i]}
     if(nt[i]>censortu[i]){type[i]=3;t1[i]=censortu[i]}
     if(nt[i]<censortu[i] && nt[i]>censortl[i]){
-      if(runif(1)<0.6){type[i] = 1;t1[i]=nt[i];t2 = nt[i]}
+      if(runif(1)<0.6){type[i] = 1;t1[i]=nt[i];t2[i] = nt[i]}
       else{type[i] = 4;t1[i]=censortl[i];t2[i]=censortu[i]}
       }
 
@@ -60,9 +60,12 @@ for(i in 1:(n*m)){
 data = list(t1 = t1, t2 = t2,type = type, FTx = FTx, crx = crx, ci = ci)
 mcmc.setup = list(nrun = 40000, nburn = 1000, nskip = 5)
 BP.setup = list(Jw = 20, a.alpha = 1, b.alpha=1)
-th_initial=c(-2,0.5)
+th.initial=c(-2,0.5)
+
+mcmc.init (model, distr, data, th.initial)
 
 simulresult<-mcmc(model = "PH",BP=1,SR=1,distr=3,data,mcmc.setup,BP.setup,th.initial)
+
 
 par(mfrow=c(3,3))
 plot(simulresult$theta[,1],type="l",ylab=expression(theta[1]),xlab="iteration")
