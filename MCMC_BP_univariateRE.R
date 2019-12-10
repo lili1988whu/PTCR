@@ -31,28 +31,28 @@ likelihood.wrapper<-function(model,BP,distr,data,parameters){
   ci = data$ci
   n.per.cluster = as.vector(table(ci))
   
-  z = parameters$z
-  th1 = parameters$th1; th2 = parameters$th2
+  bz = parameters$bz
+  th1 = parameters$theta[1]; th2 = parameters$theta[2]
   FTcoef = parameters$FTcoef; crcoef = parameters$crcoef
   
-  Fv = parameters$Fv[ci]
-  crv = parameters$crv[ci]
+  Fvc = parameters$Fv[ci]
+  crvc = parameters$crv[ci]
   
   dimFTcoef = if(is.null(dim(FTx))) NULL else dim(FTx)[2]
   FXbeta = if(is.null(dimFTcoef))  rep(0,length(ci)) else produ(FTx,FTcoef)
   dimcrcoef = if(is.null(dim(crx))) NULL else dim(crx)[2]
   crXbeta = if (is.null(dimcrcoef)) rep(0,length(ci)) else produ(crx,crcoef)
-  weight = Ys_to_weight(z)
+  weight = Ys_to_weight(bz)
   
- 
-  likelihoodall = likelihoodv(model,BP, t1,  t2, type, th1, th2, weight, distr, FXbeta, Fv, crXbeta, crv)
+  
+  likelihoodall = likelihoodv(model,BP, t1,  t2, type, th1, th2, weight, distr, FXbeta, Fvc, crXbeta, crvc)
   tempdata = data.frame(likelihoodall,ci)
   likelihoodi = as.vector(tapply(tempdata$likelihoodall,INDEX = tempdata$ci, FUN = sum))
   likelihoodsum = sum( likelihoodall)  
   return(list(likelihoodi = likelihoodi,likelihoodsum = likelihoodsum))
 }
 
-mcmc.init <- function (model = "PH", distr=3, data, th.initial){
+mcmc.init <- function (model = "PH", distr=3, SR=1, data,Jw, th.initial){
   #model---"AFT" or "PH" or "PO"
   #distr--1:Logistic distribution; 2: log-Normal distribution; 3: Weibull distribution
   #data includes:
@@ -70,7 +70,7 @@ mcmc.init <- function (model = "PH", distr=3, data, th.initial){
   FTx = data$FTx
   crx = data$crx
   ci = data$ci
-  m = unique(ci)
+  m = length(unique(ci))
   pcr = if(is.null(crx)) NULL else dim(crx)[2]
   pFT = if(is.null(FTx)) NULL else dim(FTx)[2]
   #Parametric fit to obtain priors for theta
@@ -79,12 +79,11 @@ mcmc.init <- function (model = "PH", distr=3, data, th.initial){
     #th1, th2--parameters of the centering distribution
     #FTcoef--coefficients for FTx; could be NULL
     #crcoef--coefficients for crx
-    parameters = list()
-    parameters$th1 = pa.input[1];  parameters$th2 = pa.input[2]
+    parameters = list(theta =pa.input[1:2])
     parameters$crcoef = if(is.null(pcr)) NULL else pa.input[3:(pcr+2)]
     templength = if(is.null(pcr)) 2 else pcr+2
     parameters$FTcoef = if(is.null(pFT)) NULL else pa.input[(templength+1):(templength+pFT)]
-    parameters$z = c(0,0)
+    parameters$bz = c(0,0)
     parameters$Fv = rep(0,length(t1))
     parameters$crv = rep(0,length(t1))
     p = likelihood.wrapper(model,BP = 0,distr,data,parameters)$likelihoodsum
@@ -92,7 +91,6 @@ mcmc.init <- function (model = "PH", distr=3, data, th.initial){
   }
   
   parastart = if(is.null(pFT)) c(th.initial,rep(0,pcr)) else c(th.initial,rep(0,pcr),rep(0,pFT))
-  browser()
   fit = optim(par=parastart,likelihoodoptim,hessian="TRUE")
   
   #--------------------------------------------------------------------#
@@ -105,8 +103,8 @@ mcmc.init <- function (model = "PH", distr=3, data, th.initial){
   sigma  = 0.2
   phi  = 0.3
   alpha  = 0.5
-  Fv  = if (SR>0) rnorm(n,0,0.01) else rep(0,m)
-  crv  = if (SR>0) rnorm(n,0,0.01) else rep(0,m)
+  Fv  = if (SR>0) rnorm(m,0,0.01) else rep(0,m)
+  crv  = if (SR>0) rnorm(m,0,0.01) else rep(0,m)
   
   return(list(theta = pmean.th, theta.mean = pmean.th, theta.cov = pcov.th, crcoef = crcoef, 
               FTcoef = FTcoef, bz = bz, sigma = sigma, phi = phi, 
@@ -117,22 +115,22 @@ mcmc.init <- function (model = "PH", distr=3, data, th.initial){
 adaptive.v.mean.cov <-function(d,samplesize,proposal.old,new.x,smalln, adaptive.c){
   new.mean = recursivemean_vector(proposal.old$mean, new.x, samplesize)
   new.cov = recursivecov_vector(d, samplesize,proposal.old$cov,proposal.old$mean,new.x,smalln, adaptive.c/d)
-  return(list(mean = mean, cov = new.cov))
+  return(list(mean = new.mean, cov = new.cov))
 }
 
 adaptive.mean.var <-function(samplesize,proposal.old,new.x,smalln, adaptive.c){
-    new.mean = recursivemean_vector(proposal.old$mean, new.x, samplesize)
-    new.var = recursivecov_vector(samplesize,proposal.old$var,proposal.old$mean,new.x,smalln, adaptive.c)
+    new.mean = recursivemean(proposal.old$mean, new.x, samplesize)
+    new.var = recursivecov(samplesize,proposal.old$var,proposal.old$mean,new.x,smalln, adaptive.c)
     return(list(mean = new.mean, var = new.var))
   }
   
 update.wrapper<-function(likelihood.n,likelihood.o,prior.o,prior.n,para.new,para.current){
-  if(log(runif(1))<(sum(likelihood.n)+prior.th.n-sum(likelihood.o)-prior.th.o)){
+  if(log(runif(1))<(sum(likelihood.n)+prior.n-sum(likelihood.o)-prior.o)){
     para.updated= para.new; likelihood.updated = likelihood.n; accept = TRUE
   }else{
     para.updated = para.current; likelihood.updated = likelihood.o;accept = FALSE
   }
-  return(list(likelihood.updated,para.updated,accept))
+  return(list(likelihood.updated =likelihood.updated ,para.updated = para.updated,accept = accept))
 }
 mcmc<-function(model = "PH",BP=1,SR=1,distr=3,data, mcmc.setup,BP.setup,th.initial){
   
@@ -166,7 +164,7 @@ mcmc<-function(model = "PH",BP=1,SR=1,distr=3,data, mcmc.setup,BP.setup,th.initi
   FTx = data$FTx
   crx = data$crx
   ci = data$ci
-  m = unique(ci) # number of clusters
+  m = length(unique(ci)) # number of clusters
   
   
   nrun = mcmc.setup$nrun
@@ -182,19 +180,21 @@ mcmc<-function(model = "PH",BP=1,SR=1,distr=3,data, mcmc.setup,BP.setup,th.initi
   
   #-------------------------------------------------------------------------------------------------------------#
   # Adaptive MCMC
-  browser()
-  para.updated = mcmc.init (model, distr, data, th.initial)
+  
+  para.updated = mcmc.init (model, distr, SR,data,Jw, th.initial)
   
   
-  n.I = 100; small.n = 1.0e-6; c.n = 1000
-  theta.prop$mean =rep(0,2); theta.prop$cov = c.n*smalln*diag(2); thchain.I = array(0,dim=c(n.I,2)); 
-  if(!is.null(pcr)){crcoef.prop$mean = rep(0,pcr); crcoef.prop$cov = c.n*smalln*diag(pcr); crcoefchain.I = array(0,dim=c(n.I,pcr))}
-  if(!is.null(pFT)){FTcoef.prop$mean = rep(0,pFT); FTcoef.prop$cov = c.n*smalln*diag(pFT); FTcoefchain.I = array(0,dim=c(n.I,pFT));}
-  if(BP>0){bz.prop$mean = rep(0,Jw-1); bz.prop$cov = smalln*diag(Jw-1);  bzchain.I = array(0,dim=c(n.I,Jw-1)); 
-          logalpha.prop$mean = 0; logalpha.prop$var = c.n*smalln; alphachain.I = rep(0,n.I)
-           phi.prop$mean = 0; phi.prop$var = c.n*smalln; phichain.I = rep(0,n.I)
+  n.I = 100; smalln = 1.0e-6; c.n = 1000
+  theta.prop = list(mean =rep(0,2), cov = c.n*smalln*diag(2)); thchain.I = array(0,dim=c(n.I,2)); 
+  if(!is.null(pcr)){crcoef.prop = list(mean = rep(0,pcr), cov = c.n*smalln*diag(pcr)); crcoefchain.I = array(0,dim=c(n.I,pcr))}
+  if(!is.null(pFT)){FTcoef.prop = list(mean = rep(0,pFT), cov = c.n*smalln*diag(pFT)); FTcoefchain.I = array(0,dim=c(n.I,pFT));}
+  if(BP>0){bz.prop = list(mean = rep(0,Jw-1), cov = smalln*diag(Jw-1));  bzchain.I = array(0,dim=c(n.I,Jw-1)); 
+          logalpha.prop=list(mean = 0, var = c.n*smalln); alphachain.I = rep(0,n.I)
+           phi.prop=list(mean = 0, var = c.n*smalln); phichain.I = rep(0,n.I)
   }
-  if(SR>0){crv.prop$mean = rep(0,m);crv.prop$var = c.n*rep(smalln,m); crvchain.I = array(0,dim=c(n.I,m));
+  
+
+  if(SR>0){crv.prop=list(mean = rep(0,m), var = c.n*rep(smalln,m)); crvchain.I = array(0,dim=c(n.I,m));
   }
   
    
@@ -204,7 +204,7 @@ mcmc<-function(model = "PH",BP=1,SR=1,distr=3,data, mcmc.setup,BP.setup,th.initi
   nsave = nrun/nskip - nburn
   if(!is.null(pcr)){crcoefchain = array(0,dim=c(nsave,pcr));} 
   if(!is.null(pFT)){FTcoefchain = array(0,dim=c(nsave,pFT));} 
-  thchain = array(0,dim=c(nsave,2)); 
+  thetachain = array(0,dim=c(nsave,2)); 
   if(BP>0){weightchain = array(0,dim=c(nsave,Jw));
            bzchain = array(0,dim=c(nsave,Jw-1)); 
            alphachain = rep(0,nsave)
@@ -243,6 +243,7 @@ mcmc<-function(model = "PH",BP=1,SR=1,distr=3,data, mcmc.setup,BP.setup,th.initi
      }
     
     if(iscan>n.I){
+   
       n.eff = iscan -2
       theta.prop = adaptive.v.mean.cov(2,n.eff,theta.prop,para.current$theta,smalln,adaptive.c)
       if(is.null(pcr)){crcoef.prop = adaptive.v.mean.cov(pcr,n.eff,crcoef.prop,para.current$crcoef,smalln,adaptive.c) }
@@ -255,35 +256,35 @@ mcmc<-function(model = "PH",BP=1,SR=1,distr=3,data, mcmc.setup,BP.setup,th.initi
       phi.prop = adaptive.mean.var(n.eff,phi.prop,para.current$phi,smalln,adaptive.c) 
       for(i in 1:m){
         crvi.prop = list(mean = crv.prop$mean[i],var =  crv.prop$var[i])
-        crvi.prop = adaptive.mean.var(n.eff,crvi.prop,para.current$crv$crv[i],smalln,adaptive.c) 
+        crvi.prop = adaptive.mean.var(n.eff,crvi.prop,para.current$crv[i],smalln,adaptive.c) 
         crv.prop$mean[i]=crvi.prop$mean
         crv.prop$var[i]=crvi.prop$var
          }
     }}
     
+   
     likelihood.c = likelihood.wrapper(model,BP,distr,data,para.current)$likelihoodsum
-                                 
+                              
     #update theta
     para.new = para.current
-    prior.c = log.dnorm (para.current$theta, para.current$theta.mean, para.current$theta.cov,2)
+    prior.c = log_dnorm (para.current$theta, para.current$theta.mean, para.current$theta.cov,2)
     para.new$theta = rmnorm(para.current$theta,theta.prop$cov)
     likelihood.n = likelihood.wrapper(model,BP,distr,data,para.new)$likelihoodsum
-    prior.n = log.dnorm (para.new$theta, para.current$theta.mean, para.current$theta.cov,2)
+    prior.n = log_dnorm (para.new$theta, para.current$theta.mean, para.current$theta.cov,2)
     theta.result = update.wrapper(likelihood.n,likelihood.c,prior.c,prior.n,para.new,para.current)
     
     likelihood.c = theta.result$likelihood.updated
     para.current = theta.result$para.updated
     acceptance$theta = isTRUE(theta.result$accept)+1
     
-    
-    
+   
     if(BP>0){
       #update weight parameters bz
       para.new = para.current
-      prior.c = para.current$alpha*sum(log(Ys_to_weight(para.current$bz)))
+      prior.c = exp(para.current$logalpha)*sum(log(Ys_to_weight(para.current$bz)))
       para.new$bz = rmnorm(para.current$bz,bz.prop$cov)
       likelihood.n = likelihood.wrapper(model,BP,distr,data,para.new)$likelihoodsum
-      prior.n = lpara.current$alpha*sum(log(Ys_to_weight(para.new$bz)))
+      prior.n = exp(para.current$logalpha)*sum(log(Ys_to_weight(para.new$bz)))
       bz.result = update.wrapper(likelihood.n,likelihood.c,prior.c,prior.n,para.new,para.current)
       
       likelihood.c = bz.result$likelihood.updated
@@ -291,11 +292,11 @@ mcmc<-function(model = "PH",BP=1,SR=1,distr=3,data, mcmc.setup,BP.setup,th.initi
       acceptance$bz = isTRUE(bz.result$accept)+1
       
       #update alpha
-      z.c = bz.c
+     
       weight.c = Ys_to_weight(para.current$bz)
-      alpha.o = para.current$alpha
+      alpha.o = exp(para.current$logalpha)
       prior.alpha.o = lgamma(alpha.o*Jw)-Jw*lgamma(alpha.o)+sum((alpha.o-1)*log(weight.c))+(a.alpha-1)*log(alpha.o)-b.alpha*alpha.o
-      alpha.n = exp(rnorm(1,log(alpha.o),sqrt(var.logalpha)))
+      alpha.n = exp(rnorm(1,para.current$logalpha,sqrt( logalpha.prop$var)))
       prior.alpha.n = lgamma(alpha.n*Jw)-Jw*lgamma(alpha.n)+sum((alpha.n-1)*log(weight.c))+(a.alpha-1)*log(alpha.n)-b.alpha*alpha.n
       if(log(runif(1))<(prior.alpha.n-prior.alpha.o)){
         para.current$alpha = alpha.n; acceptance$alpha = acceptance$alpha+1
@@ -317,11 +318,12 @@ mcmc<-function(model = "PH",BP=1,SR=1,distr=3,data, mcmc.setup,BP.setup,th.initi
     acceptance$crcoef = isTRUE(crcoef.result$accept)+1
     }
     
+    
     #update FTcoef parameters 
     if(!is.null(pFT)){
       para.new = para.current
       prior.FTcoef.o = -t(para.current$FTcoef)%*%(para.current$FTcoef)/5^2/2
-      para.new$FTcoef = if(pT==1) rnorm(1,para.current$FTcoef,sqrt(FTcoef.prop$cov)) else rmnorm(para.current$FTcoef,FTcoef.prop$cov)
+      para.new$FTcoef = if(pFT==1) rnorm(1,para.current$FTcoef,sqrt(FTcoef.prop$cov)) else rmnorm(para.current$FTcoef,FTcoef.prop$cov)
       likelihood.n = likelihood.wrapper(model,BP,distr,data,para.new)$likelihoodsum
       prior.n = -t(para.new$FTcoef)%*%(para.new$FTcoef)/5^2/2
       FTcoef.result = update.wrapper(likelihood.n,likelihood.c,prior.c,prior.n,para.new,para.current)
@@ -331,7 +333,6 @@ mcmc<-function(model = "PH",BP=1,SR=1,distr=3,data, mcmc.setup,BP.setup,th.initi
     }
     
     if(SR>0){
-      
     #update random effects
     likelihood.cv = likelihood.wrapper(model,BP,distr,data,para.current)
     para.new = para.current
@@ -341,8 +342,8 @@ mcmc<-function(model = "PH",BP=1,SR=1,distr=3,data, mcmc.setup,BP.setup,th.initi
     prior.c = -para.current$crv^2/para.current$sigma^2/2
     prior.n = -para.new$crv^2/para.new$sigma^2/2
     eval.v = (prior.n+likelihood.nv$likelihoodi)>(prior.c+likelihood.cv$likelihoodi)
-    para.current$crv = if(eval_v)para.new$crv else para.current$crv
-    acceptance$crv = if(eval_v)acceptance$crv else acceptance$crv+1
+    para.current$crv = 1*(eval.v)*para.new$crv + (1-1*(eval.v))*para.current$crv
+    acceptance$crv = 1*(eval.v)*(acceptance$crv+1)+(1-1*(eval.v))*acceptance$crv
     
     
     #update sigma.u
@@ -367,13 +368,13 @@ mcmc<-function(model = "PH",BP=1,SR=1,distr=3,data, mcmc.setup,BP.setup,th.initi
     
     #print(cbind(iscan,indsave,sum(likelihood.s),alpha.c,acceptance[1]))
     if(iscan<=n.I){
-      crcoefchain.I[iscan-1,] = crcoef.c; 
-      FTcoefchain.I[iscan-1,] = FTcoef.c; 
-      thchain.I[iscan-1,] = th.c; 
-      bzchain.I[iscan-1,] = bz.c; 
-      alphachain.I[iscan-1] = alpha.c
-      phichain.I[iscan-1] = phi.c 
-      crvchain.I[iscan-1,] = crv.c; 
+      crcoefchain.I[iscan-1,] = para.current$crcoef; 
+      FTcoefchain.I[iscan-1,] = para.current$FTcoef; 
+      thchain.I[iscan-1,] = para.current$theta; 
+      bzchain.I[iscan-1,] = para.current$bz; 
+      alphachain.I[iscan-1] = exp(para.current$logalpha)
+      phichain.I[iscan-1] = para.current$phi 
+      crvchain.I[iscan-1,] = para.current$crv; 
       
     }
     
@@ -385,9 +386,10 @@ mcmc<-function(model = "PH",BP=1,SR=1,distr=3,data, mcmc.setup,BP.setup,th.initi
       thetachain[indsave,] = para.current$theta; 
       weightchain[indsave,] = Ys_to_weight(para.current$bz); 
       bzchain[indsave,] = para.current$bz
-      alphachain[indsave] = para.current$alpha
+      alphachain[indsave,] = exp(para.current$logalpha)
       phichain[indsave] = para.current$phi 
       sigmauchain[indsave] = para.current$sigma
+      crvchain[indsave,] = para.current$crv
       likelihoodchain[indsave,] = likelihood.c
     }
   }
@@ -397,7 +399,7 @@ mcmc<-function(model = "PH",BP=1,SR=1,distr=3,data, mcmc.setup,BP.setup,th.initi
   WAIC2 = lppd-sum(apply(likelihoodchain,2,var))#preferred
   LPML = -sum(log(apply(exp(-likelihoodchain),2,mean)))
   
-  result<-list(theta = thchain,
+  result<-list(theta = thetachain,
                crcoef = crcoefchain,
                FTcoef = FTcoefchain,
                weight = weightchain,

@@ -634,6 +634,8 @@ double recursivecov(int samplesize,double pre_cov,double pre_mean,double new_x,d
   
   return(new_cov);
 }
+
+
 // [[Rcpp::export]] 
 arma::vec recursivemean_vector(arma::vec pre_mean, arma::vec new_x, int samplesize){
   int n = pre_mean.size ();

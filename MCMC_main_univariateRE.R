@@ -62,7 +62,7 @@ mcmc.setup = list(nrun = 40000, nburn = 1000, nskip = 5)
 BP.setup = list(Jw = 20, a.alpha = 1, b.alpha=1)
 th.initial=c(-2,0.5)
 
-mcmc.init (model, distr, data, th.initial)
+mcmc.init (model="PH", distr=3, SR=1,data, BP.setup$Jw, th.initial)
 
 simulresult<-mcmc(model = "PH",BP=1,SR=1,distr=3,data,mcmc.setup,BP.setup,th.initial)
 
