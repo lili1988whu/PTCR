@@ -2,7 +2,7 @@ source('MCMC_BP_univariateRE.R')
 
 #---------------------------------------------------------------------------------------------------#
 # Model setup
-m = 30; n = 10; model = "PH";distr=3;BP=1
+m = 30; n = 100; model = "PH";distr=3;BP=1
 crcoef_s = c(-1,0.2);pcr = 2;FTcoef_s = c(0.5,-0.5);pFT=2;phi_s = 0.3
 #    n---number of individuals under study.
 #    m---number of units within each individual.
@@ -62,9 +62,9 @@ mcmc.setup = list(nrun = 40000, nburn = 1000, nskip = 5)
 BP.setup = list(Jw = 20, a.alpha = 1, b.alpha=1)
 th.initial=c(-2,0.5)
 
-mcmc.init (model="PH", distr=3, SR=1,data, BP.setup$Jw, th.initial)
+mcmc.init (model="PH", distr=3, SR=0,data, BP.setup$Jw, th.initial)
 
-simulresult<-mcmc(model = "PH",BP=1,SR=1,distr=3,data,mcmc.setup,BP.setup,th.initial)
+simulresult<-mcmc(model = "PH",BP=1,SR=0,distr=3,data,mcmc.setup,BP.setup,th.initial)
 
 
 par(mfrow=c(3,3))

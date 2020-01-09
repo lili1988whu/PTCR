@@ -55,6 +55,12 @@ likelihood.wrapper<-function(model,BP,distr,data,parameters){
 mcmc.init <- function (model = "PH", distr=3, SR=1, data,Jw, th.initial){
   #model---"AFT" or "PH" or "PO"
   #distr--1:Logistic distribution; 2: log-Normal distribution; 3: Weibull distribution
+  #SR random effects indicators:
+     #0--no random effects
+     #1--Fv = rho*crv
+     #2--crv, no Fv
+     #3--Fv, no crv
+     #4--both crv and Fv
   #data includes:
        #t1--lower bound of the observed interval for failure time or observed; default is zero
        #t2--upper bound of the observed interval for failure time or observed; default is Inf
@@ -100,11 +106,22 @@ mcmc.init <- function (model = "PH", distr=3, SR=1, data,Jw, th.initial){
   crcoef  = fit$par[3:(pcr+2)]
   FTcoef  = if (is.null(pFT)) NULL else fit$par[(pcr+3):(pcr+2+pFT)]
   bz  = rep(0,Jw-1)
-  sigma  = 0.2
-  phi  = 0.3
-  alpha  = 0.5
-  Fv  = if (SR>0) rnorm(m,0,0.01) else rep(0,m)
-  crv  = if (SR>0) rnorm(m,0,0.01) else rep(0,m)
+  if(SR==1|SR==2|SR==3){sigma  = 0.2}
+  if(SR==4){sigma = c(0.2,0.2)}
+  if(SR==0){sigma = NULL;phi  = NULL}
+  if(SR==1){phi = 0.3}
+  if(BP>0){alpha  = 5}else{alpha=NULL}
+  
+  #SR random effects indicators:
+  #0--no random effects
+  #1--Fv = rho*crv
+  #2--crv, no Fv
+  #3--Fv, no crv
+  #4--both crv and Fv
+  
+  
+  Fv  = if (SR==1|SR==3|SR==4) rnorm(m,0,0.01) else rep(0,m)
+  crv  = if (SR==1|SR==2|SR==4) rnorm(m,0,0.01) else rep(0,m)
   
   return(list(theta = pmean.th, theta.mean = pmean.th, theta.cov = pcov.th, crcoef = crcoef, 
               FTcoef = FTcoef, bz = bz, sigma = sigma, phi = phi, 
@@ -136,7 +153,12 @@ mcmc<-function(model = "PH",BP=1,SR=1,distr=3,data, mcmc.setup,BP.setup,th.initi
   
   #model---"AFT" or "PH" or "PO"
   #BP--0: no Bernstein Polynomial modeling of the baseline hazard function; 1: otherwise
-  #SR--0: no random effects; 1: otherwise
+  #SR random effects indicators:
+        #0--no random effects
+        #1--Fv = rho*crv
+        #2--crv, no Fv
+        #3--Fv, no crv
+        #4--both crv and Fv
   #distr--1:Logistic distribution; 2: log-Normal distribution; 3: Weibull distribution
  
   #data includes:
@@ -181,7 +203,7 @@ mcmc<-function(model = "PH",BP=1,SR=1,distr=3,data, mcmc.setup,BP.setup,th.initi
   #-------------------------------------------------------------------------------------------------------------#
   # Adaptive MCMC
   
-  para.updated = mcmc.init (model, distr, SR,data,Jw, th.initial)
+  para.current = mcmc.init (model, distr, SR,data,Jw, th.initial)
   
   
   n.I = 100; smalln = 1.0e-6; c.n = 1000
@@ -194,9 +216,13 @@ mcmc<-function(model = "PH",BP=1,SR=1,distr=3,data, mcmc.setup,BP.setup,th.initi
   }
   
 
-  if(SR>0){crv.prop=list(mean = rep(0,m), var = c.n*rep(smalln,m)); crvchain.I = array(0,dim=c(n.I,m));
-  }
-  
+  if(SR==1|SR==2|SR==4|SR==0){crv.prop=list(mean = rep(0,m), var = c.n*rep(smalln,m)); crvchain.I = array(0,dim=c(n.I,m));}
+  if(SR==3|SR==4){Fv.prop=list(mean = rep(0,m), var = c.n*rep(smalln,m)); Fvchain.I = array(0,dim=c(n.I,m));}
+  #0--no random effects
+  #1--Fv = rho*crv
+  #2--crv, no Fv
+  #3--Fv, no crv
+  #4--both crv and Fv
    
   
   # Things to save
@@ -208,20 +234,26 @@ mcmc<-function(model = "PH",BP=1,SR=1,distr=3,data, mcmc.setup,BP.setup,th.initi
   if(BP>0){weightchain = array(0,dim=c(nsave,Jw));
            bzchain = array(0,dim=c(nsave,Jw-1)); 
            alphachain = rep(0,nsave)
-  }
-  if(SR>0){
-           phichain = rep(0,nsave)  
-           sigmauchain = rep(0,nsave)
+  }else{weightchain = NULL; bzchain = NULL; alphachain = NULL}
+  if(SR==1|SR==2|SR==4){
            crvchain = array(0,dim=c(nsave,m)); 
-  }
-  acceptance = list(theta = 0, FTcoef = 0, crcoef = 0, weight = 0, alpha = 0, phi = 0, sigmau = 0, crv = rep(0,m))
+  }else{crvchain = NULL}
+  if(SR==3|SR==4){
+    Fvchain = array(0,dim=c(nsave,m)); 
+  }else{Fvchain = NULL}
+  
+  if(SR==1){phichain = rep(0,nsave)}else{phichain = NULL}
+  if(SR==0){sigmauchain = NULL}
+  if(SR==1|SR==2|SR==3){sigmauchain = rep(0,nsave)}
+  if(SR==4){sigmauchain = array(0,dim=c(nsave,2))}
+  
+  acceptance = list(theta = 0, FTcoef = 0, crcoef = 0, weight = 0, alpha = 0, phi = 0, sigmau = 0, crv = rep(0,m), Fv = rep(0,m))
   likelihoodchain =array(0,dim=c(nsave,m));
   
   
   #MCMC iterations
   for(iscan in 2:nrun){
     adaptive.c = 2.4^2
-    para.current = para.updated
     
     if(iscan==n.I){
       n.eff = iscan -2
@@ -235,12 +267,17 @@ mcmc<-function(model = "PH",BP=1,SR=1,distr=3,data, mcmc.setup,BP.setup,th.initi
           logalpha.prop$mean = mean(log(alphachain.I[1:(n.eff)]))
           logalpha.prop$var= adaptive.c*var(log(alphachain.I[1:(n.eff)]))+smalln
       }
-      if(SR>0){
-          phi.prop$mean = mean(phichain.I[1:(n.eff)])
-          phi.prop$var = adaptive.c*var(phichain.I[1:(n.eff)])+smalln
+      if(SR==1|SR==2|SR==4){
+          if(SR==1){phi.prop$mean = mean(phichain.I[1:(n.eff)])
+          phi.prop$var = adaptive.c*var(phichain.I[1:(n.eff)])+smalln}
           crv.prop$mean = apply(crvchain.I[1:n.eff,],2,mean)
           crv.prop$var = adaptive.c*apply(crvchain.I[1:n.eff,],2,var)+rep(smalln,m)}
-     }
+    
+    if(SR==3|SR==4){
+      Fv.prop$mean = apply(Fvchain.I[1:n.eff,],2,mean)
+      Fv.prop$var = adaptive.c*apply(Fvchain.I[1:n.eff,],2,var)+rep(smalln,m)
+      }
+    }
     
     if(iscan>n.I){
    
@@ -252,15 +289,21 @@ mcmc<-function(model = "PH",BP=1,SR=1,distr=3,data, mcmc.setup,BP.setup,th.initi
        bz.prop = adaptive.v.mean.cov(Jw-1,n.eff,bz.prop,para.current$bz,smalln,adaptive.c) 
        logalpha.prop = adaptive.mean.var(n.eff,logalpha.prop,para.current$logalpha,smalln,adaptive.c) 
       }
-      if(SR>0){
-      phi.prop = adaptive.mean.var(n.eff,phi.prop,para.current$phi,smalln,adaptive.c) 
+      if(SR==1|SR==2|SR==4){
+      if(SR==1){phi.prop = adaptive.mean.var(n.eff,phi.prop,para.current$phi,smalln,adaptive.c)} 
       for(i in 1:m){
         crvi.prop = list(mean = crv.prop$mean[i],var =  crv.prop$var[i])
         crvi.prop = adaptive.mean.var(n.eff,crvi.prop,para.current$crv[i],smalln,adaptive.c) 
         crv.prop$mean[i]=crvi.prop$mean
         crv.prop$var[i]=crvi.prop$var
-         }
-    }}
+      }}
+      if(SR==3|SR==4){
+        Fvi.prop = list(mean = Fv.prop$mean[i],var =  Fv.prop$var[i])
+        Fvi.prop = adaptive.mean.var(n.eff,Fvi.prop,para.current$Fv[i],smalln,adaptive.c) 
+        Fv.prop$mean[i]=Fvi.prop$mean
+        Fv.prop$var[i]=Fvi.prop$var
+      }
+      }
     
    
     likelihood.c = likelihood.wrapper(model,BP,distr,data,para.current)$likelihoodsum
@@ -286,7 +329,6 @@ mcmc<-function(model = "PH",BP=1,SR=1,distr=3,data, mcmc.setup,BP.setup,th.initi
       likelihood.n = likelihood.wrapper(model,BP,distr,data,para.new)$likelihoodsum
       prior.n = exp(para.current$logalpha)*sum(log(Ys_to_weight(para.new$bz)))
       bz.result = update.wrapper(likelihood.n,likelihood.c,prior.c,prior.n,para.new,para.current)
-      
       likelihood.c = bz.result$likelihood.updated
       para.current = bz.result$para.updated
       acceptance$bz = isTRUE(bz.result$accept)+1
@@ -298,11 +340,11 @@ mcmc<-function(model = "PH",BP=1,SR=1,distr=3,data, mcmc.setup,BP.setup,th.initi
       prior.alpha.o = lgamma(alpha.o*Jw)-Jw*lgamma(alpha.o)+sum((alpha.o-1)*log(weight.c))+(a.alpha-1)*log(alpha.o)-b.alpha*alpha.o
       alpha.n = exp(rnorm(1,para.current$logalpha,sqrt( logalpha.prop$var)))
       prior.alpha.n = lgamma(alpha.n*Jw)-Jw*lgamma(alpha.n)+sum((alpha.n-1)*log(weight.c))+(a.alpha-1)*log(alpha.n)-b.alpha*alpha.n
+      
       if(log(runif(1))<(prior.alpha.n-prior.alpha.o)){
-        para.current$alpha = alpha.n; acceptance$alpha = acceptance$alpha+1
-      }else{
-        para.current$alpha = alpha.o; 
+        para.current$logalpha = log(alpha.n); acceptance$alpha = acceptance$alpha+1
       }
+      
     }
 
     #update crcoef parameters 
@@ -332,7 +374,7 @@ mcmc<-function(model = "PH",BP=1,SR=1,distr=3,data, mcmc.setup,BP.setup,th.initi
       acceptance$FTcoef = isTRUE(FTcoef.result$accept)+1
     }
     
-    if(SR>0){
+    if(SR==1){
     #update random effects
     likelihood.cv = likelihood.wrapper(model,BP,distr,data,para.current)
     para.new = para.current
@@ -365,16 +407,89 @@ mcmc<-function(model = "PH",BP=1,SR=1,distr=3,data, mcmc.setup,BP.setup,th.initi
     acceptance$phi= isTRUE(phi.result$accept)+1
     }
     
+    if(SR==2){
+      #update random effects
+      likelihood.cv = likelihood.wrapper(model,BP,distr,data,para.current)
+      para.new = para.current
+      para.new$crv = samplerancrv(para.current$crv, crv.prop$var, m)
+      para.new$FTv = rep(0,m)
+      likelihood.nv = likelihood.wrapper(model,BP,distr,data,para.new)
+      prior.c = -para.current$crv^2/para.current$sigma^2/2
+      prior.n = -para.new$crv^2/para.new$sigma^2/2
+      eval.v = (prior.n+likelihood.nv$likelihoodi)>(prior.c+likelihood.cv$likelihoodi)
+      para.current$crv = 1*(eval.v)*para.new$crv + (1-1*(eval.v))*para.current$crv
+      acceptance$crv = 1*(eval.v)*(acceptance$crv+1)+(1-1*(eval.v))*acceptance$crv
+      
+      #update sigma.u
+      Lambda= sampleLambda(a = 2, zetasq = 10^3, para.current$sigma)
+      para.current$sigma = samplesigma(n, a=2, para.current$crv, Lambda)
+    }
     
-    #print(cbind(iscan,indsave,sum(likelihood.s),alpha.c,acceptance[1]))
+    if(SR==3){
+      #update random effects
+      likelihood.cv = likelihood.wrapper(model,BP,distr,data,para.current)
+      para.new = para.current
+      para.new$Fv = samplerancrv(para.current$Fv, Fv.prop$var, m)
+      para.new$crv = rep(0,m)
+      likelihood.nv = likelihood.wrapper(model,BP,distr,data,para.new)
+      prior.c = -para.current$Fv^2/para.current$sigma^2/2
+      prior.n = -para.new$Fv^2/para.new$sigma^2/2
+      eval.v = (prior.n+likelihood.nv$likelihoodi)>(prior.c+likelihood.cv$likelihoodi)
+      para.current$Fv = 1*(eval.v)*para.new$Fv + (1-1*(eval.v))*para.current$Fv
+      acceptance$Fv = 1*(eval.v)*(acceptance$Fv+1)+(1-1*(eval.v))*acceptance$Fv
+      
+      #update sigma.u
+      Lambda= sampleLambda(a = 2, zetasq = 10^3, para.current$sigma)
+      para.current$sigma = samplesigma(n, a=2, para.current$Fv, Lambda)
+    }
+    
+    if(SR==4){
+      #update random effects
+      
+      likelihood.cv = likelihood.wrapper(model,BP,distr,data,para.current)
+      para.new = para.current
+      para.new$crv = samplerancrv(para.current$crv, crv.prop$var, m)
+      para.new$FTv = rep(0,m)
+      likelihood.nv = likelihood.wrapper(model,BP,distr,data,para.new)
+      prior.c = -para.current$crv^2/para.current$sigma[1]^2/2
+      prior.n = -para.new$crv^2/para.new$sigma[1]^2/2
+      eval.v = (prior.n+likelihood.nv$likelihoodi)>(prior.c+likelihood.cv$likelihoodi)
+      para.current$crv = 1*(eval.v)*para.new$crv + (1-1*(eval.v))*para.current$crv
+      acceptance$crv = 1*(eval.v)*(acceptance$crv+1)+(1-1*(eval.v))*acceptance$crv
+      
+      #update sigma.u
+      Lambdacrv= sampleLambda(a = 2, zetasq = 10^3, para.current$sigma[2])
+      para.current$sigma[1] = samplesigma(n, a=2, para.current$crv, Lambdacrv)
+      
+      
+      likelihood.cv = likelihood.wrapper(model,BP,distr,data,para.current)
+      para.new = para.current
+      para.new$Fv = samplerancrv(para.current$Fv, Fv.prop$var, m)
+      para.new$crv = rep(0,m)
+      likelihood.nv = likelihood.wrapper(model,BP,distr,data,para.new)
+      prior.c = -para.current$Fv^2/para.current$sigma[2]^2/2
+      prior.n = -para.new$Fv^2/para.new$sigma[2]^2/2
+      eval.v = (prior.n+likelihood.nv$likelihoodi)>(prior.c+likelihood.cv$likelihoodi)
+      para.current$Fv = 1*(eval.v)*para.new$Fv + (1-1*(eval.v))*para.current$Fv
+      acceptance$Fv = 1*(eval.v)*(acceptance$Fv+1)+(1-1*(eval.v))*acceptance$Fv
+      
+      #update sigma.u
+      LambdaFv= sampleLambda(a = 2, zetasq = 10^3, para.current$sigma[2])
+      para.current$sigma[2] = samplesigma(n, a=2, para.current$Fv, LambdaFv)
+    }
+    
+    
+    
+    print(c(para.current$FTcoef,para.current$crcoef,para.current$logalpha,para.current$phi))
     if(iscan<=n.I){
       crcoefchain.I[iscan-1,] = para.current$crcoef; 
       FTcoefchain.I[iscan-1,] = para.current$FTcoef; 
       thchain.I[iscan-1,] = para.current$theta; 
-      bzchain.I[iscan-1,] = para.current$bz; 
-      alphachain.I[iscan-1] = exp(para.current$logalpha)
-      phichain.I[iscan-1] = para.current$phi 
-      crvchain.I[iscan-1,] = para.current$crv; 
+      if(BP>0){bzchain.I[iscan-1,] = para.current$bz; 
+      alphachain.I[iscan-1] = exp(para.current$logalpha)}
+      if(SR==1){phichain.I[iscan-1] = para.current$phi} 
+      if(SR==1|SR==2|SR==4){crvchain.I[iscan-1,] = para.current$crv;} 
+      if(SR==3|SR==4){Fvchain.I[iscan-1,] = para.current$Fv;} 
       
     }
     
@@ -384,12 +499,15 @@ mcmc<-function(model = "PH",BP=1,SR=1,distr=3,data, mcmc.setup,BP.setup,th.initi
       crcoefchain[indsave,] = para.current$crcoef; 
       FTcoefchain[indsave,] = para.current$FTcoef; 
       thetachain[indsave,] = para.current$theta; 
-      weightchain[indsave,] = Ys_to_weight(para.current$bz); 
+      if(BP>0){weightchain[indsave,] = Ys_to_weight(para.current$bz); 
       bzchain[indsave,] = para.current$bz
-      alphachain[indsave,] = exp(para.current$logalpha)
-      phichain[indsave] = para.current$phi 
-      sigmauchain[indsave] = para.current$sigma
-      crvchain[indsave,] = para.current$crv
+      alphachain[indsave] = exp(para.current$logalpha)}
+      if(SR==1){phichain[indsave] = para.current$phi} 
+      if(SR==1|SR==2|SR==3){sigmauchain[indsave] = para.current$sigma}
+      if(SR==4){sigmauchain[indsave,] = para.current$sigma}
+      if(SR==1|SR==2|SR==4){crvchain[indsave,] = para.current$crv}
+      if(SR==3|SR==4){Fvchain[indsave,] = para.current$Fv}
+      
       likelihoodchain[indsave,] = likelihood.c
     }
   }
