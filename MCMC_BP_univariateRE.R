@@ -211,7 +211,7 @@ mcmc<-function(model = "PH",BP=1,SR=1,distr=3,data, mcmc.setup,BP.setup,th.initi
   theta.prop = list(mean =rep(0,2), cov = c.n*smalln*diag(2)); thchain.I = array(0,dim=c(n.I,2)); 
   if(!is.null(pcr)){crcoef.prop = list(mean = rep(0,pcr), cov = c.n*smalln*diag(pcr)); crcoefchain.I = array(0,dim=c(n.I,pcr))}
   if(!is.null(pFT)){FTcoef.prop = list(mean = rep(0,pFT), cov = c.n*smalln*diag(pFT)); FTcoefchain.I = array(0,dim=c(n.I,pFT));}
-  if(BP>0){bz.prop = list(mean = rep(0,Jw-1), cov = smalln*diag(Jw-1));  bzchain.I = array(0,dim=c(n.I,Jw-1)); 
+  if(BP>0){bz.prop = list(mean = rep(0,Jw-1), cov = c.n*smalln*diag(Jw-1));  bzchain.I = array(0,dim=c(n.I,Jw-1)); 
           logalpha.prop=list(mean = 0, var = c.n*smalln); alphachain.I = rep(0,n.I)
            phi.prop=list(mean = 0, var = c.n*smalln); phichain.I = rep(0,n.I)
   }
@@ -248,7 +248,7 @@ mcmc<-function(model = "PH",BP=1,SR=1,distr=3,data, mcmc.setup,BP.setup,th.initi
   if(SR==1|SR==2|SR==3){sigmauchain = rep(0,nsave)}
   if(SR==4){sigmauchain = array(0,dim=c(nsave,2))}
   
-  acceptance = list(theta = 0, FTcoef = 0, crcoef = 0, weight = 0, alpha = 0, phi = 0, sigmau = 0, crv = rep(0,m), Fv = rep(0,m))
+  acceptance = list(theta = 0, FTcoef = 0, crcoef = 0, bz = 0, alpha = 0, phi = 0, sigmau = 0, crv = rep(0,m), Fv = rep(0,m))
   likelihoodchain =array(0,dim=c(nsave,m));
   
   
@@ -319,23 +319,22 @@ mcmc<-function(model = "PH",BP=1,SR=1,distr=3,data, mcmc.setup,BP.setup,th.initi
 
     likelihood.c = theta.result$likelihood.updated
     para.current = theta.result$para.updated
-    acceptance$theta = isTRUE(theta.result$accept)+1
+    acceptance$theta = 1*isTRUE(theta.result$accept)+acceptance$theta
     
    
     if(BP>0){
       #update weight parameters bz
       para.new = para.current
       prior.c = exp(para.current$logalpha)*sum(log(Ys_to_weight(para.current$bz)))
-      para.new$bz = rmnorm(para.current$bz,bz.prop$cov)
+      para.new$bz = rmnorm(para.current$bz,5*bz.prop$cov)
       likelihood.n = likelihood.wrapper(model,BP,distr,data,para.new)$likelihoodsum
       prior.n = exp(para.current$logalpha)*sum(log(Ys_to_weight(para.new$bz)))
       bz.result = update.wrapper(likelihood.n,likelihood.c,prior.c,prior.n,para.new,para.current)
       likelihood.c = bz.result$likelihood.updated
       para.current = bz.result$para.updated
-      acceptance$bz = isTRUE(bz.result$accept)+1
-      
+      acceptance$bz = 1*isTRUE(bz.result$accept)+acceptance$bz
       #update alpha
-     
+      #browser()
       weight.c = Ys_to_weight(para.current$bz)
       alpha.o = exp(para.current$logalpha)
       prior.alpha.o = lgamma(alpha.o*Jw)-Jw*lgamma(alpha.o)+sum((alpha.o-1)*log(weight.c))+(a.alpha-1)*log(alpha.o)-b.alpha*alpha.o
@@ -347,7 +346,7 @@ mcmc<-function(model = "PH",BP=1,SR=1,distr=3,data, mcmc.setup,BP.setup,th.initi
       }
       
     }
-
+   
     #update crcoef parameters 
     if(!is.null(pcr)){
     para.new = para.current
@@ -358,7 +357,7 @@ mcmc<-function(model = "PH",BP=1,SR=1,distr=3,data, mcmc.setup,BP.setup,th.initi
     crcoef.result = update.wrapper(likelihood.n,likelihood.c,prior.c,prior.n,para.new,para.current)
     likelihood.c = crcoef.result$likelihood.updated
     para.current = crcoef.result$para.updated
-    acceptance$crcoef = isTRUE(crcoef.result$accept)+1
+    acceptance$crcoef = 1*isTRUE(crcoef.result$accept)+acceptance$crcoef 
     }
     
     
@@ -372,7 +371,7 @@ mcmc<-function(model = "PH",BP=1,SR=1,distr=3,data, mcmc.setup,BP.setup,th.initi
       FTcoef.result = update.wrapper(likelihood.n,likelihood.c,prior.c,prior.n,para.new,para.current)
       likelihood.c = FTcoef.result$likelihood.updated
       para.current = FTcoef.result$para.updated
-      acceptance$FTcoef = isTRUE(FTcoef.result$accept)+1
+      acceptance$FTcoef = isTRUE(FTcoef.result$accept)+acceptance$FTcoef
     }
     
     if(SR==1){
@@ -386,7 +385,7 @@ mcmc<-function(model = "PH",BP=1,SR=1,distr=3,data, mcmc.setup,BP.setup,th.initi
     prior.n = -para.new$crv^2/para.new$sigma^2/2
     eval.v = (prior.n+likelihood.nv$likelihoodi)>(prior.c+likelihood.cv$likelihoodi)
     para.current$crv = 1*(eval.v)*para.new$crv + (1-1*(eval.v))*para.current$crv
-    acceptance$crv = 1*(eval.v)*(acceptance$crv+1)+(1-1*(eval.v))*acceptance$crv
+    acceptance$crv = 1*(eval.v)+acceptance$crv
     
     
     #update sigma.u
@@ -405,7 +404,7 @@ mcmc<-function(model = "PH",BP=1,SR=1,distr=3,data, mcmc.setup,BP.setup,th.initi
     likelihood.c = phi.result$likelihood.updated
     para.current = phi.result$para.updated
     para.current$FTv = para.current$phi*para.current$crv
-    acceptance$phi= isTRUE(phi.result$accept)+1
+    acceptance$phi= isTRUE(phi.result$accept)+acceptance$phi
     }
     
     if(SR==2){
@@ -419,7 +418,7 @@ mcmc<-function(model = "PH",BP=1,SR=1,distr=3,data, mcmc.setup,BP.setup,th.initi
       prior.n = -para.new$crv^2/para.new$sigma^2/2
       eval.v = (prior.n+likelihood.nv$likelihoodi)>(prior.c+likelihood.cv$likelihoodi)
       para.current$crv = 1*(eval.v)*para.new$crv + (1-1*(eval.v))*para.current$crv
-      acceptance$crv = 1*(eval.v)*(acceptance$crv+1)+(1-1*(eval.v))*acceptance$crv
+      acceptance$crv = 1*(eval.v)+acceptance$crv
       
       #update sigma.u
       Lambda= sampleLambda(a = 2, zetasq = 10^3, para.current$sigma)
@@ -437,7 +436,7 @@ mcmc<-function(model = "PH",BP=1,SR=1,distr=3,data, mcmc.setup,BP.setup,th.initi
       prior.n = -para.new$Fv^2/para.new$sigma^2/2
       eval.v = (prior.n+likelihood.nv$likelihoodi)>(prior.c+likelihood.cv$likelihoodi)
       para.current$Fv = 1*(eval.v)*para.new$Fv + (1-1*(eval.v))*para.current$Fv
-      acceptance$Fv = 1*(eval.v)*(acceptance$Fv+1)+(1-1*(eval.v))*acceptance$Fv
+      acceptance$Fv = 1*(eval.v)+acceptance$Fv
       
       #update sigma.u
       Lambda= sampleLambda(a = 2, zetasq = 10^3, para.current$sigma)
@@ -456,7 +455,7 @@ mcmc<-function(model = "PH",BP=1,SR=1,distr=3,data, mcmc.setup,BP.setup,th.initi
       prior.n = -para.new$crv^2/para.new$sigma[1]^2/2
       eval.v = (prior.n+likelihood.nv$likelihoodi)>(prior.c+likelihood.cv$likelihoodi)
       para.current$crv = 1*(eval.v)*para.new$crv + (1-1*(eval.v))*para.current$crv
-      acceptance$crv = 1*(eval.v)*(acceptance$crv+1)+(1-1*(eval.v))*acceptance$crv
+      acceptance$crv = 1*(eval.v)+acceptance$crv
       
       #update sigma.u
       Lambdacrv= sampleLambda(a = 2, zetasq = 10^3, para.current$sigma[2])
@@ -472,7 +471,7 @@ mcmc<-function(model = "PH",BP=1,SR=1,distr=3,data, mcmc.setup,BP.setup,th.initi
       prior.n = -para.new$Fv^2/para.new$sigma[2]^2/2
       eval.v = (prior.n+likelihood.nv$likelihoodi)>(prior.c+likelihood.cv$likelihoodi)
       para.current$Fv = 1*(eval.v)*para.new$Fv + (1-1*(eval.v))*para.current$Fv
-      acceptance$Fv = 1*(eval.v)*(acceptance$Fv+1)+(1-1*(eval.v))*acceptance$Fv
+      acceptance$Fv = 1*(eval.v)+acceptance$Fv
       
       #update sigma.u
       LambdaFv= sampleLambda(a = 2, zetasq = 10^3, para.current$sigma[2])
@@ -511,7 +510,7 @@ mcmc<-function(model = "PH",BP=1,SR=1,distr=3,data, mcmc.setup,BP.setup,th.initi
       
       likelihoodchain[indsave,] = likelihood.c
     }
-    print(c(iscan,para.current$crcoef,para.current$FTcoef,sum(likelihood.c)))
+    
   }
   #Compute WAIC
   lppd = sum(log(apply(exp(likelihoodchain),2,mean)))

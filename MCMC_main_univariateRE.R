@@ -4,6 +4,17 @@ source('MCMC_BP_univariateRE.R')
 # Model setup
 m = 30; n = 10; model = "PO";distr=2;BP=1;SR=0
 crcoef_s = c(1,0.2);pcr = 2;FTcoef_s = c(0.5,-0.5);pFT=2
+nsimul = 10
+
+t=seq(0.1,30,0.1)
+densit0 = NULL
+survt0=NULL
+densit = matrix(0,ncol = length(t),nrow= nsimul)
+survt = matrix(0,ncol = length(t),nrow= nsimul)
+densit.p = matrix(0,ncol = length(t),nrow= nsimul)
+survt.p = matrix(0,ncol = length(t),nrow= nsimul)
+crcoefresult = matrix(0,ncol=4,nrow=nsimul)
+FTcoefresult = matrix(0,ncol=4,nrow=nsimul)
 #    n---number of individuals under study.
 #    m---number of units within each individual.
 #    d_r---dimension of the random effect vector u_i.
@@ -15,7 +26,7 @@ crcoef_s = c(1,0.2);pcr = 2;FTcoef_s = c(0.5,-0.5);pFT=2
 
 #----------------------------------------------------------------------------------------------------#
 #set.seed(12348)
-
+for(ns in 1:nsimul){
 #------------------------------------------------------------------------------------------------------------#
 #Simulate observed failure times, censoring indicators, and covariates 
 crx = cbind(rep(1,n*m),rnorm(n*m,0,1))
@@ -57,13 +68,43 @@ for(i in 1:(n*m)){
 
 i = 5;type[i];t1[i];t2[i]
 data = list(t1 = t1, t2 = t2,type = type, FTx = FTx, crx = crx, ci = ci)
-mcmc.setup = list(nrun = 40000, nburn = 1000, nskip = 5)
+mcmc.setup = list(nrun = 20000, nburn = 1000, nskip = 5)
 BP.setup = list(Jw = 20, a.alpha = 1, b.alpha=1)
 th.initial=c(-2,0.5)
 
-mcmc.init (model, distr, SR,data, BP.setup$Jw, th.initial)
+mcmc.int.o <- mcmc.init (model, distr, SR,data, BP.setup$Jw, th.initial)
 
 simulresult<-mcmc(model,BP,SR,distr,data,mcmc.setup,BP.setup,th.initial)
+
+
+
+crcoefresult[ns,] = cbind(crcoef_s,apply(simulresult$crcoef,2,mean))
+FTcoefresult[ns,] = cbind(FTcoef_s,apply(simulresult$FTcoef,2,mean))
+
+seq = 1:length(simulresult$theta[,1])
+
+for(k in 1:length(seq)){
+  for(i in 1:length(t)){
+    th1 = simulresult$theta[seq[k],1]
+    th2 = simulresult$theta[seq[k],2]
+    w = simulresult$weight[seq[k],]
+    densit[i] = densit[i]+exp(logf0BP(t[i], th1, th2, w, BP, distr))/length(seq)
+    survt[i] = survt[i]+S0BP(t[i], th1, th2, w, BP, distr)/length(seq)
+  }
+}
+
+ for(i in 1:length(t)){
+   w = apply(simulresult$weight[seq,],2,mean)
+   densit.p[i] = exp(logf0BP(t[i], mcmc.int.o$theta[1], mcmc.int.o$theta[2], w, 0, distr))
+   survt.p[i] = S0BP(t[i], mcmc.int.o$theta[1], mcmc.int.o$theta[2], w, 0, distr)
+  }
+
+}
+
+for(i in 1:length(t)){
+  densit0[i] = densi0(t[i])
+  survt0[i] = 1-F0(t[i])
+}
 
 
 par(mfrow=c(3,3))
@@ -79,49 +120,18 @@ plot(simulresult$alpha,type="l",ylab=expression(alpha),xlab="iteration")
 
 
 
-cbind(crcoef_s,apply(simulresult$crcoef,2,mean))
-cbind(FTcoef_s,apply(simulresult$FTcoef,2,mean))
-
-round(mean(simulresult$sigma),2)
-round(sigmau,2)
-mean(simulresult$phi)
-
 par(mfrow=c(3,1))
 plot(simulresult$sigma,type="l",ylab=expression(Sigma),xlab="iteration")
 plot(simulresult$random_effect[,3],type="l",ylab=expression(u[1]),xlab="iteration")
 plot(simulresult$phi,type="l",ylab=expression(phi),xlab="iteration")
 
-t=seq(0.1,30,0.1)
-densit0 = NULL
-survt0=NULL
-densit = rep(0,length(t))
-survt = rep(0,length(t))
-seq = 1:500
-
-for(k in 1:length(seq)){
-  for(i in 1:length(t)){
-    th1 = simulresult$theta[seq[k],1]
-    th2 = simulresult$theta[seq[k],2]
-    w = simulresult$weight[seq[k],]
-    densit[i] = densit[i]+exp(logf0BP(t[i], th1, th2, w, 1, 1))/length(seq)
-    survt[i] = survt[i]+S0BP(t[i], th1, th2, w, 1, 1)/length(seq)
-    
-  }
-}
-
-
-for(i in 1:length(t)){
-  th1 = mean(simulresult$theta[seq,1])
-  th2 = mean(simulresult$theta[seq,2])
-  w = apply(simulresult$weight[seq,],2,mean)
-  densit0[i] = densi0(t[i])
-  survt0[i] = 1-F0(t[i])
- 
-}
-
-par(mfrow=c(2,1))
-plot(t,densit,type="l",col="red",ylim=c(0,0.2))
+plot(t,densit,type="l",col="red",ylim=c(0,0.5))
 lines(t,densit0,col="blue")
+lines(t,densit.p,col="black")
+legend("topright",legend=c("NP","T","P"),col=c("red","blue","black"),lty=1)
 
 plot(t,survt,type="l",col="red",ylim=c(0,1))
 lines(t,survt0,col="blue")
+lines(t,survt.p,col="black")
+legend("topright",legend=c("NP","T","P"),col=c("red","blue","black"),lty=1)
+
