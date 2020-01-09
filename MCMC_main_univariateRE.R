@@ -2,26 +2,25 @@ source('MCMC_BP_univariateRE.R')
 
 #---------------------------------------------------------------------------------------------------#
 # Model setup
-m = 30; n = 100; model = "PH";distr=3;BP=1
-crcoef_s = c(-1,0.2);pcr = 2;FTcoef_s = c(0.5,-0.5);pFT=2;phi_s = 0.3
+m = 30; n = 10; model = "PO";distr=2;BP=1;SR=0
+crcoef_s = c(1,0.2);pcr = 2;FTcoef_s = c(0.5,-0.5);pFT=2
 #    n---number of individuals under study.
 #    m---number of units within each individual.
 #    d_r---dimension of the random effect vector u_i.
 #    model---the survival model for the latent distribution.
-#    distribution---the assumed parametric centering distribution for the latent distribution.
+#    distr--1:Logistic distribution; 2:Normal distribution; 3: Weibull distribution
 #    crcoef_s---cure rate coefficients with dimesion pcr.
 #    FTcoef_s--- coefficients in the survival model of the latent distribution; dimension of it is pFT. 
-#    phi_s---the coefficient linking latent distribution random effects and cure rate random effects.FTw = phi*cru. 
+#    phi_s---the coefficient linking latent distribution random effects and cure rate random effects.FTv = phi*crv. 
 
 #----------------------------------------------------------------------------------------------------#
 #set.seed(12348)
 
 #------------------------------------------------------------------------------------------------------------#
 #Simulate observed failure times, censoring indicators, and covariates 
-crx = cbind(rep(1,n*m),rnorm(n*m,0,0.5))
-FTx = cbind(rbinom(n*m,1,0.5),rnorm(n*m,0,0.5))
+crx = cbind(rep(1,n*m),rnorm(n*m,0,1))
+FTx = cbind(rbinom(n*m,1,0.5),rnorm(n*m,0,1))
 
-sigmau = 0.25
 
 #    adj.g---adjacency matrix
 #    adj.g.wish---the upper left half of adj.g
@@ -29,22 +28,21 @@ sigmau = 0.25
 #    K---A sample of precision matrix from G-Wishart distribution with graph Dn-0.9*adj.g and 4 degrees of freedom
 #    sigmau--covariance matrix of the random effects
 
+if(SR==0){crv_s = rep(0,m);FTv_s = rep(0,m)}
+if(SR==1){ sigmau = 0.25;phi_s = 0.3;crv_s = rnorm(m,0,sqrt(sigmau));FTv_s = phi_s*crv_s}
+if(SR==2){sigmau = 0.25; crv_s = rnorm(m,0,sqrt(sigmau))}
+if(SR==3){sigmau = 0.25;FTv_s = rnorm(m,0,sqrt(sigmau))}
+if(SR==4){sigmau = c(0.25,0.25); crv_s = rnorm(m,0,sqrt(sigmau));FTv_s = rnorm(m,0,sqrt(sigmau))}
 
-cru_s = rep(0,n);FTw_s = rep(0,n)
-for(i in 1:m){
-  cru_s[i] = rnorm(1,0,sqrt(sigmau))
-  FTw_s[i] = phi_s*cru_s[i]
-}
-
-#    cru---cure rate random effects, sampled from multivariate normal with mean zero and covariance sigmau.
-#    FTw---latent distribution random effects
-nt = sampleTs(model,n,m,crx, rep(cru_s,each=n),crcoef_s, FTx,FTcoef_s, rep(FTw_s,each=n))
-type=rep(0,n*m);ci = rep(seq(1,m,1),each = n)
+#    crv---cure rate random effects, sampled from multivariate normal with mean zero and covariance sigmau.
+#    FTv---latent distribution random effects
+nt = sampleTs(model,n,m,crx, rep(crv_s,each=n),crcoef_s, FTx,FTcoef_s, rep(FTv_s,each=n))
+ci = rep(seq(1,m,1),each = n)
 
 #t1--lower bound of the observed interval for failure time or observed; default is zero
 #t2--upper bound of the observed interval for failure time or observed; default is Inf
 
-ind = 1;t1=rep(0,n*m);t2=rep(Inf,n*m);censortu=NULL;censortl=NULL
+type=rep(0,n*m);ind = 1;t1=rep(0,n*m);t2=rep(Inf,n*m);censortu=NULL;censortl=NULL
 for(i in 1:(n*m)){
   censortu[i] = 20
   censortl[i] = rexp(1,1)
@@ -57,14 +55,15 @@ for(i in 1:(n*m)){
 
 }
 
+i = 5;type[i];t1[i];t2[i]
 data = list(t1 = t1, t2 = t2,type = type, FTx = FTx, crx = crx, ci = ci)
 mcmc.setup = list(nrun = 40000, nburn = 1000, nskip = 5)
 BP.setup = list(Jw = 20, a.alpha = 1, b.alpha=1)
 th.initial=c(-2,0.5)
 
-mcmc.init (model="PH", distr=3, SR=0,data, BP.setup$Jw, th.initial)
+mcmc.init (model, distr, SR,data, BP.setup$Jw, th.initial)
 
-simulresult<-mcmc(model = "PH",BP=1,SR=0,distr=3,data,mcmc.setup,BP.setup,th.initial)
+simulresult<-mcmc(model,BP,SR,distr,data,mcmc.setup,BP.setup,th.initial)
 
 
 par(mfrow=c(3,3))

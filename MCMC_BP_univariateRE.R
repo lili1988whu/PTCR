@@ -23,6 +23,7 @@ likelihood.wrapper<-function(model,BP,distr,data,parameters){
                #crcoef--coefficients for crx
                #crv--random effects for cure rate; could be NULL
                #FTv--random effects for latent failure time distribution; could be NULL
+  #browser()
   t1 = data$t1
   t2 = data$t2
   type = data$type
@@ -110,7 +111,7 @@ mcmc.init <- function (model = "PH", distr=3, SR=1, data,Jw, th.initial){
   if(SR==4){sigma = c(0.2,0.2)}
   if(SR==0){sigma = NULL;phi  = NULL}
   if(SR==1){phi = 0.3}
-  if(BP>0){alpha  = 5}else{alpha=NULL}
+  if(BP>0){alpha  = 5}else{alpha=1}
   
   #SR random effects indicators:
   #0--no random effects
@@ -315,7 +316,7 @@ mcmc<-function(model = "PH",BP=1,SR=1,distr=3,data, mcmc.setup,BP.setup,th.initi
     likelihood.n = likelihood.wrapper(model,BP,distr,data,para.new)$likelihoodsum
     prior.n = log_dnorm (para.new$theta, para.current$theta.mean, para.current$theta.cov,2)
     theta.result = update.wrapper(likelihood.n,likelihood.c,prior.c,prior.n,para.new,para.current)
-    
+
     likelihood.c = theta.result$likelihood.updated
     para.current = theta.result$para.updated
     acceptance$theta = isTRUE(theta.result$accept)+1
@@ -350,7 +351,7 @@ mcmc<-function(model = "PH",BP=1,SR=1,distr=3,data, mcmc.setup,BP.setup,th.initi
     #update crcoef parameters 
     if(!is.null(pcr)){
     para.new = para.current
-    prior.crcoef.o = -t(para.current$crcoef)%*%(para.current$crcoef)/5^2/2
+    prior.c = -t(para.current$crcoef)%*%(para.current$crcoef)/5^2/2
     para.new$crcoef = if(pcr==1) rnorm(1,para.current$crcoef,sqrt(crcoef.prop$cov)) else rmnorm(para.current$crcoef,crcoef.prop$cov)
     likelihood.n = likelihood.wrapper(model,BP,distr,data,para.new)$likelihoodsum
     prior.n = -t(para.new$crcoef)%*%(para.new$crcoef)/5^2/2
@@ -364,7 +365,7 @@ mcmc<-function(model = "PH",BP=1,SR=1,distr=3,data, mcmc.setup,BP.setup,th.initi
     #update FTcoef parameters 
     if(!is.null(pFT)){
       para.new = para.current
-      prior.FTcoef.o = -t(para.current$FTcoef)%*%(para.current$FTcoef)/5^2/2
+      prior.c = -t(para.current$FTcoef)%*%(para.current$FTcoef)/5^2/2
       para.new$FTcoef = if(pFT==1) rnorm(1,para.current$FTcoef,sqrt(FTcoef.prop$cov)) else rmnorm(para.current$FTcoef,FTcoef.prop$cov)
       likelihood.n = likelihood.wrapper(model,BP,distr,data,para.new)$likelihoodsum
       prior.n = -t(para.new$FTcoef)%*%(para.new$FTcoef)/5^2/2
@@ -480,7 +481,7 @@ mcmc<-function(model = "PH",BP=1,SR=1,distr=3,data, mcmc.setup,BP.setup,th.initi
     
     
     
-    print(c(para.current$FTcoef,para.current$crcoef,para.current$logalpha,para.current$phi))
+    #print(c(para.current$FTcoef,para.current$crcoef,para.current$logalpha,para.current$phi))
     if(iscan<=n.I){
       crcoefchain.I[iscan-1,] = para.current$crcoef; 
       FTcoefchain.I[iscan-1,] = para.current$FTcoef; 
@@ -510,12 +511,14 @@ mcmc<-function(model = "PH",BP=1,SR=1,distr=3,data, mcmc.setup,BP.setup,th.initi
       
       likelihoodchain[indsave,] = likelihood.c
     }
+    print(c(iscan,para.current$crcoef,para.current$FTcoef,sum(likelihood.c)))
   }
   #Compute WAIC
   lppd = sum(log(apply(exp(likelihoodchain),2,mean)))
   WAIC1 = lppd-(2*sum(log(apply(exp(likelihoodchain),2,mean))-apply(likelihoodchain,2,mean)))
   WAIC2 = lppd-sum(apply(likelihoodchain,2,var))#preferred
   LPML = -sum(log(apply(exp(-likelihoodchain),2,mean)))
+  #browser()
   
   result<-list(theta = thetachain,
                crcoef = crcoefchain,

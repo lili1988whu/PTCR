@@ -92,14 +92,14 @@ arma::vec sampleTs(std::vector<std::string> model,int n,int m,arma::mat crx, arm
   arma::mat cr(n*m,1);cr.zeros();
   cr = crx*crcoef;
   cr.col(0) = cr.col(0)+cru;
-  cr.col(0) = arma::exp(cr.col(0))/(1.0+arma::exp(cr.col(0)));
+  cr.col(0) = arma::exp(cr.col(0));
   arma::mat FT(n*m,1); FT.col(0) = FTw;
     for(int i=1;i<=n;i++){
         for(int j=1;j<=m;j++){
             u = Rf_runif(0,1);
-            if (u<= cr(ind-1,0)){t(ind-1) = 10000.00;}
+            if (u<= std::exp(-cr(ind-1,0))){t(ind-1) = 10000.00;}
             else {
-                Fu = std::log(u)/log(cr(ind-1,0));
+                Fu = -std::log(u)/cr(ind-1,0);
                 t(ind-1) = sampleT(model, Fu, FTx.row(ind-1),FTcoef,FT(ind-1,0));}
             ind = ind+1;
         }}
@@ -266,10 +266,7 @@ arma::vec AFT_BP_logliki(arma::vec t1, arma::vec t2,
   double temp,temp2;
   double logl;
   for(int i=0; i<type.size(); i++){
-    temp2 = exp(crXbeta(i)+crv(i))/(1.0+exp(crXbeta(i)+crv(i)));
-    if(temp2<SYSMIN){temp = -LOGSYSMIN;}
-    else{temp =-log(temp2);}
-    //temp = exp(crXbeta(i)+crv(i));
+    temp = exp(crXbeta(i)+crv(i));
     if(type[i]==1){
       res(i) = AFT_BP_logpdf(t1(i), th1, th2, w, BP, distr, FXbeta(i)+Fv(i))+log(temp)
       -exp(AFT_BP_logcdf(t1(i), th1, th2, w, BP, distr, FXbeta(i)+Fv(i)))*temp; /*Observed*/
@@ -346,10 +343,7 @@ arma::vec PH_BP_logliki(arma::vec t1, arma::vec t2,
   double temp,temp2;
   double logl;
   for(int i=0; i<type.size(); i++){
-    /*temp = exp(crXbeta(i)+crv(i));*/
-    temp2 = exp(crXbeta(i)+crv(i))/(1.0+exp(crXbeta(i)+crv(i)));
-    if(temp2<SYSMIN){temp = -LOGSYSMIN;}
-    else{temp =-log(temp2);}
+    temp = exp(crXbeta(i)+crv(i));
     if(type[i]==1){
       res(i) = PH_BP_logpdf(t1(i), th1, th2, w, BP, distr, FXbeta(i)+Fv(i))+log(temp)
       -exp(PH_BP_logcdf(t1(i), th1, th2, w, BP, distr, FXbeta(i)+Fv(i)))*temp; /*Observed*/
@@ -435,9 +429,7 @@ arma::vec PO_BP_logliki(arma::vec t1, arma::vec t2,
   double temp,temp2;
   double logl;
   for(int i=0; i<type.size(); i++){
-    temp2 = exp(crXbeta(i)+crv(i))/(1.0+exp(crXbeta(i)+crv(i)));
-    if(temp2<SYSMIN){temp = -LOGSYSMIN;}
-    else{temp =-log(temp2);}
+    temp = exp(crXbeta(i)+crv(i));
     if(type[i]==1){
       res(i) = PO_BP_logpdf(t1(i), th1, th2, w, BP, distr, FXbeta(i)+Fv(i))+log(temp)
       -exp(PO_BP_logcdf(t1(i), th1, th2, w, BP, distr, FXbeta(i)+Fv(i)))*temp; /*Observed*/
