@@ -103,14 +103,14 @@ mcmc.init <- function (model = "PH", distr=3, SR=1, data,Jw, th.initial){
   #--------------------------------------------------------------------#
   #initial values
   #-------------------------------------------------------------------------------------------------------------#
-  pmean.th = fit$par[1:2]; pcov.th = 0.001*fit$hessian[1:2,1:2]
+  pmean.th = fit$par[1:2]; pcov.th = 0.01*fit$hessian[1:2,1:2]
   crcoef  = fit$par[3:(pcr+2)]
   FTcoef  = if (is.null(pFT)) NULL else fit$par[(pcr+3):(pcr+2+pFT)]
   bz  = rep(0,Jw-1)
   if(SR==1|SR==2|SR==3){sigma  = 0.2}
   if(SR==4){sigma = c(0.2,0.2)}
   if(SR==0){sigma = NULL;phi  = NULL}
-  if(SR==1){phi = 0.3}
+  if(SR==1){phi = 0.3}else{phi=NULL}
   if(BP>0){alpha  = 5}else{alpha=1}
   
   #SR random effects indicators:
@@ -240,8 +240,8 @@ mcmc<-function(model = "PH",BP=1,SR=1,distr=3,data, mcmc.setup,BP.setup,th.initi
            crvchain = array(0,dim=c(nsave,m)); 
   }else{crvchain = NULL}
   if(SR==3|SR==4){
-    Fvchain = array(0,dim=c(nsave,m)); 
-  }else{Fvchain = NULL}
+    FTvchain = array(0,dim=c(nsave,m)); 
+  }else{FTvchain = NULL}
   
   if(SR==1){phichain = rep(0,nsave)}else{phichain = NULL}
   if(SR==0){sigmauchain = NULL}
@@ -310,6 +310,7 @@ mcmc<-function(model = "PH",BP=1,SR=1,distr=3,data, mcmc.setup,BP.setup,th.initi
     likelihood.c = likelihood.wrapper(model,BP,distr,data,para.current)$likelihoodsum
                               
     #update theta
+    #Maybe updating theta with bz?
     para.new = para.current
     prior.c = log_dnorm (para.current$theta, para.current$theta.mean, para.current$theta.cov,2)
     para.new$theta = rmnorm(para.current$theta,theta.prop$cov)
@@ -326,7 +327,7 @@ mcmc<-function(model = "PH",BP=1,SR=1,distr=3,data, mcmc.setup,BP.setup,th.initi
       #update weight parameters bz
       para.new = para.current
       prior.c = exp(para.current$logalpha)*sum(log(Ys_to_weight(para.current$bz)))
-      para.new$bz = rmnorm(para.current$bz,5*bz.prop$cov)
+      para.new$bz = rmnorm(para.current$bz,bz.prop$cov)
       likelihood.n = likelihood.wrapper(model,BP,distr,data,para.new)$likelihoodsum
       prior.n = exp(para.current$logalpha)*sum(log(Ys_to_weight(para.new$bz)))
       bz.result = update.wrapper(likelihood.n,likelihood.c,prior.c,prior.n,para.new,para.current)
@@ -489,7 +490,7 @@ mcmc<-function(model = "PH",BP=1,SR=1,distr=3,data, mcmc.setup,BP.setup,th.initi
       alphachain.I[iscan-1] = exp(para.current$logalpha)}
       if(SR==1){phichain.I[iscan-1] = para.current$phi} 
       if(SR==1|SR==2|SR==4){crvchain.I[iscan-1,] = para.current$crv;} 
-      if(SR==3|SR==4){Fvchain.I[iscan-1,] = para.current$Fv;} 
+      if(SR==3|SR==4){FTvchain.I[iscan-1,] = para.current$Fv;} 
       
     }
     
@@ -525,7 +526,8 @@ mcmc<-function(model = "PH",BP=1,SR=1,distr=3,data, mcmc.setup,BP.setup,th.initi
                weight = weightchain,
                bz = bzchain,
                alpha = alphachain,
-               random.effect = crvchain,
+               crv = crvchain,
+               FTv = FTvchain,
                likelihood = likelihoodchain,
                sigma = sigmauchain,
                phi = phichain,

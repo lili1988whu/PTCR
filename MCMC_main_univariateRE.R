@@ -2,9 +2,9 @@ source('MCMC_BP_univariateRE.R')
 
 #---------------------------------------------------------------------------------------------------#
 # Model setup
-m = 30; n = 10; model = "PH";distr=2;BP=1;SR=0
+m = 30; n = 30; model = "PH";distr=2;BP=1;SR=2
 crcoef_s = c(1,0.2);pcr = 2;FTcoef_s = c(0.5,-0.5);pFT=2
-nsimul = 2
+nsimul = 1
 
 t=seq(0.1,30,0.1)
 densit0 = NULL
@@ -15,6 +15,9 @@ densit.p = matrix(0,ncol = length(t),nrow= nsimul)
 survt.p = matrix(0,ncol = length(t),nrow= nsimul)
 crcoefresult = matrix(0,ncol=4,nrow=nsimul)
 FTcoefresult = matrix(0,ncol=4,nrow=nsimul)
+if(SR==1|SR==2|SR==3){sigmaresult = matrix(0,ncol=2,nrow=nsimul) }
+if(SR==4){sigmaresult = matrix(0,ncol=4,nrow=nsimul) }
+if(SR==1){phiresult = matrix(0,ncol=2,nrow=nsimul)}
 #    n---number of individuals under study.
 #    m---number of units within each individual.
 #    d_r---dimension of the random effect vector u_i.
@@ -41,8 +44,8 @@ FTx = cbind(rbinom(n*m,1,0.5),rnorm(n*m,0,1))
 
 if(SR==0){crv_s = rep(0,m);FTv_s = rep(0,m)}
 if(SR==1){ sigmau = 0.25;phi_s = 0.3;crv_s = rnorm(m,0,sqrt(sigmau));FTv_s = phi_s*crv_s}
-if(SR==2){sigmau = 0.25; crv_s = rnorm(m,0,sqrt(sigmau))}
-if(SR==3){sigmau = 0.25;FTv_s = rnorm(m,0,sqrt(sigmau))}
+if(SR==2){sigmau = 0.25; crv_s = rnorm(m,0,sqrt(sigmau));FTv_s = rep(0,m)}
+if(SR==3){sigmau = 0.25;FTv_s = rnorm(m,0,sqrt(sigmau));crv_s = rep(0,m)}
 if(SR==4){sigmau = c(0.25,0.25); crv_s = rnorm(m,0,sqrt(sigmau));FTv_s = rnorm(m,0,sqrt(sigmau))}
 
 #    crv---cure rate random effects, sampled from multivariate normal with mean zero and covariance sigmau.
@@ -69,7 +72,7 @@ for(i in 1:(n*m)){
 i = 5;type[i];t1[i];t2[i]
 data = list(t1 = t1, t2 = t2,type = type, FTx = FTx, crx = crx, ci = ci)
 mcmc.setup = list(nrun = 20000, nburn = 1000, nskip = 5)
-BP.setup = list(Jw = 20, a.alpha = 1, b.alpha=1)
+BP.setup = list(Jw = 15, a.alpha = 0.1, b.alpha=0.1)
 th.initial=c(-2,0.5)
 
 mcmc.int.o <- mcmc.init (model, distr, SR,data, BP.setup$Jw, th.initial)
@@ -80,9 +83,11 @@ simulresult<-mcmc(model,BP,SR,distr,data,mcmc.setup,BP.setup,th.initial)
 
 crcoefresult[ns,] = cbind(crcoef_s,apply(simulresult$crcoef,2,mean))
 FTcoefresult[ns,] = cbind(FTcoef_s,apply(simulresult$FTcoef,2,mean))
+if(SR==1|SR==2|SR==3){sigmaresult[ns,] = c(sigmau,mean(simulresult$sigma))}
+if(SR==4){sigmaresult[ns,] = c(sigmau,mean(simulresult$sigma))}
+if(SR==1){phiresult[ns,] = c(phi_s,mean(simulresult$phi))}
 
 seq = 1:length(simulresult$theta[,1])
-
 for(k in 1:length(seq)){
   for(i in 1:length(t)){
     th1 = simulresult$theta[seq[k],1]
@@ -114,15 +119,15 @@ plot(simulresult$crcoef[,1],type="l",ylab=expression(gamma[1]),xlab="iteration")
 plot(simulresult$crcoef[,2],type="l",ylab=expression(gamma[2]),xlab="iteration")
 plot(simulresult$FTcoef[,1],type="l",ylab=expression(beta[1]),xlab="iteration")
 plot(simulresult$FTcoef[,2],type="l",ylab=expression(beta[2]),xlab="iteration")
-plot(simulresult$weight[,1],type="l",ylab=expression(w[1]),xlab="iteration")
-plot(simulresult$weight[,2],type="l",ylab=expression(w[1]),xlab="iteration")
+plot(simulresult$weight[,3],type="l",ylab=expression(w[1]),xlab="iteration")
+plot(simulresult$weight[,4],type="l",ylab=expression(w[1]),xlab="iteration")
 plot(simulresult$alpha,type="l",ylab=expression(alpha),xlab="iteration")
 
 
 
 par(mfrow=c(3,1))
 plot(simulresult$sigma,type="l",ylab=expression(Sigma),xlab="iteration")
-plot(simulresult$random_effect[,3],type="l",ylab=expression(u[1]),xlab="iteration")
+plot(simulresult$random.effect[,3],type="l",ylab=expression(u[1]),xlab="iteration")
 plot(simulresult$phi,type="l",ylab=expression(phi),xlab="iteration")
 
 plot(t,apply(densit,2,mean),type="l",col="red",ylim=c(0,0.2))
