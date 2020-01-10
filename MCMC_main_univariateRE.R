@@ -2,9 +2,9 @@ source('MCMC_BP_univariateRE.R')
 
 #---------------------------------------------------------------------------------------------------#
 # Model setup
-m = 30; n = 10; model = "PO";distr=2;BP=1;SR=0
+m = 30; n = 10; model = "PH";distr=2;BP=1;SR=0
 crcoef_s = c(1,0.2);pcr = 2;FTcoef_s = c(0.5,-0.5);pFT=2
-nsimul = 10
+nsimul = 2
 
 t=seq(0.1,30,0.1)
 densit0 = NULL
@@ -55,12 +55,12 @@ ci = rep(seq(1,m,1),each = n)
 
 type=rep(0,n*m);ind = 1;t1=rep(0,n*m);t2=rep(Inf,n*m);censortu=NULL;censortl=NULL
 for(i in 1:(n*m)){
-  censortu[i] = 20
+  censortu[i] = 30
   censortl[i] = rexp(1,1)
    if(nt[i]<censortl[i]){type[i]=2;t2[i]=censortl[i]}
     if(nt[i]>censortu[i]){type[i]=3;t1[i]=censortu[i]}
     if(nt[i]<censortu[i] && nt[i]>censortl[i]){
-      if(runif(1)<0.6){type[i] = 1;t1[i]=nt[i];t2[i] = nt[i]}
+      if(runif(1)<0.9){type[i] = 1;t1[i]=nt[i];t2[i] = nt[i]}
       else{type[i] = 4;t1[i]=censortl[i];t2[i]=censortu[i]}
       }
 
@@ -88,15 +88,15 @@ for(k in 1:length(seq)){
     th1 = simulresult$theta[seq[k],1]
     th2 = simulresult$theta[seq[k],2]
     w = simulresult$weight[seq[k],]
-    densit[i] = densit[i]+exp(logf0BP(t[i], th1, th2, w, BP, distr))/length(seq)
-    survt[i] = survt[i]+S0BP(t[i], th1, th2, w, BP, distr)/length(seq)
+    densit[ns,i] = densit[ns,i]+exp(logf0BP(t[i], th1, th2, w, BP, distr))/length(seq)
+    survt[ns,i] = survt[ns,i]+S0BP(t[i], th1, th2, w, BP, distr)/length(seq)
   }
 }
 
  for(i in 1:length(t)){
    w = apply(simulresult$weight[seq,],2,mean)
-   densit.p[i] = exp(logf0BP(t[i], mcmc.int.o$theta[1], mcmc.int.o$theta[2], w, 0, distr))
-   survt.p[i] = S0BP(t[i], mcmc.int.o$theta[1], mcmc.int.o$theta[2], w, 0, distr)
+   densit.p[ns,i] = exp(logf0BP(t[i], mcmc.int.o$theta[1], mcmc.int.o$theta[2], w, 0, distr))
+   survt.p[ns,i] = S0BP(t[i], mcmc.int.o$theta[1], mcmc.int.o$theta[2], w, 0, distr)
   }
 
 }
@@ -125,13 +125,15 @@ plot(simulresult$sigma,type="l",ylab=expression(Sigma),xlab="iteration")
 plot(simulresult$random_effect[,3],type="l",ylab=expression(u[1]),xlab="iteration")
 plot(simulresult$phi,type="l",ylab=expression(phi),xlab="iteration")
 
-plot(t,densit,type="l",col="red",ylim=c(0,0.5))
+plot(t,apply(densit,2,mean),type="l",col="red",ylim=c(0,0.2))
 lines(t,densit0,col="blue")
-lines(t,densit.p,col="black")
+lines(t,apply(densit.p,2,mean),col="black")
 legend("topright",legend=c("NP","T","P"),col=c("red","blue","black"),lty=1)
 
-plot(t,survt,type="l",col="red",ylim=c(0,1))
+plot(t,apply(survt,2,mean),type="l",col="red",ylim=c(0,1))
 lines(t,survt0,col="blue")
-lines(t,survt.p,col="black")
+lines(t,apply(survt.p,2,mean),col="black")
 legend("topright",legend=c("NP","T","P"),col=c("red","blue","black"),lty=1)
 
+apply(crcoefresult,2,mean)
+apply(FTcoefresult,2,mean)
