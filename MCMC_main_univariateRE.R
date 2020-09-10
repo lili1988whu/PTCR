@@ -2,7 +2,7 @@ source('MCMC_BP_univariateRE.R')
 
 #---------------------------------------------------------------------------------------------------#
 # Model setup
-m = 30; n = 30; model = "PH";distr=2;BP=1;SR=2
+m = 30; n = 30; model = "PH";distr=2;BP=1;SR=3
 crcoef_s = c(1,0.2);pcr = 2;FTcoef_s = c(0.5,-0.5);pFT=2
 nsimul = 1
 
@@ -125,9 +125,9 @@ plot(simulresult$alpha,type="l",ylab=expression(alpha),xlab="iteration")
 
 
 
-par(mfrow=c(3,1))
+par(mfrow=c(2,2))
 plot(simulresult$sigma,type="l",ylab=expression(Sigma),xlab="iteration")
-plot(simulresult$random.effect[,3],type="l",ylab=expression(u[1]),xlab="iteration")
+plot(simulresult$crv[,3],type="l",ylab=expression(u[1]),xlab="iteration")
 plot(simulresult$phi,type="l",ylab=expression(phi),xlab="iteration")
 
 plot(t,apply(densit,2,mean),type="l",col="red",ylim=c(0,0.2))
