@@ -218,7 +218,7 @@ mcmc<-function(model = "PH",BP=1,SR=1,distr=3,data, mcmc.setup,BP.setup,th.initi
   
 
   if(SR==1|SR==2|SR==4|SR==0){crv.prop=list(mean = rep(0,m), var = c.n*rep(smalln,m)); crvchain.I = array(0,dim=c(n.I,m));}
-  if(SR==3|SR==4){Fv.prop=list(mean = rep(0,m), var = c.n*rep(smalln,m)); Fvchain.I = array(0,dim=c(n.I,m));}
+  if(SR==3|SR==4){Fv.prop=list(mean = rep(0,m), var = c.n*rep(smalln,m)); FTvchain.I = array(0,dim=c(n.I,m));}
   #0--no random effects
   #1--Fv = rho*crv
   #2--crv, no Fv
@@ -275,8 +275,8 @@ mcmc<-function(model = "PH",BP=1,SR=1,distr=3,data, mcmc.setup,BP.setup,th.initi
           crv.prop$var = adaptive.c*apply(crvchain.I[1:n.eff,],2,var)+rep(smalln,m)}
     
     if(SR==3|SR==4){
-      Fv.prop$mean = apply(Fvchain.I[1:n.eff,],2,mean)
-      Fv.prop$var = adaptive.c*apply(Fvchain.I[1:n.eff,],2,var)+rep(smalln,m)
+      Fv.prop$mean = apply(FTvchain.I[1:n.eff,],2,mean)
+      Fv.prop$var = adaptive.c*apply(FTvchain.I[1:n.eff,],2,var)+rep(smalln,m)
       }
     }
     
@@ -507,7 +507,7 @@ mcmc<-function(model = "PH",BP=1,SR=1,distr=3,data, mcmc.setup,BP.setup,th.initi
       if(SR==1|SR==2|SR==3){sigmauchain[indsave] = para.current$sigma}
       if(SR==4){sigmauchain[indsave,] = para.current$sigma}
       if(SR==1|SR==2|SR==4){crvchain[indsave,] = para.current$crv}
-      if(SR==3|SR==4){Fvchain[indsave,] = para.current$Fv}
+      if(SR==3|SR==4){FTvchain[indsave,] = para.current$Fv}
       
       likelihoodchain[indsave,] = likelihood.c
     }
