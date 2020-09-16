@@ -6,6 +6,15 @@ m = 30; n = 30; model = "PH";distr=2;BP=1;SR=3
 crcoef_s = c(1,0.2);pcr = 2;FTcoef_s = c(0.5,-0.5);pFT=2
 nsimul = 1
 
+#model---"AFT" or "PH" or "PO"
+#distr--1:Logistic distribution; 2: log-Normal distribution; 3: Weibull distribution
+#SR random effects indicators:
+#0--no random effects
+#1--Fv = rho*crv
+#2--crv, no Fv
+#3--Fv, no crv
+#4--both crv and Fv
+
 t=seq(0.1,30,0.1)
 densit0 = NULL
 survt0=NULL
@@ -50,8 +59,9 @@ if(SR==4){sigmau = c(0.25,0.25); crv_s = rnorm(m,0,sqrt(sigmau));FTv_s = rnorm(m
 
 #    crv---cure rate random effects, sampled from multivariate normal with mean zero and covariance sigmau.
 #    FTv---latent distribution random effects
-nt = sampleTs(model,n,m,crx, rep(crv_s,each=n),crcoef_s, FTx,FTcoef_s, rep(FTv_s,each=n))
 ci = rep(seq(1,m,1),each = n)
+nt = sampleTs(model,n,m,crx, crv_s[ci],crcoef_s, FTx,FTcoef_s, FTv_s[ci])
+
 
 #t1--lower bound of the observed interval for failure time or observed; default is zero
 #t2--upper bound of the observed interval for failure time or observed; default is Inf
@@ -140,5 +150,5 @@ lines(t,survt0,col="blue")
 lines(t,apply(survt.p,2,mean),col="black")
 legend("topright",legend=c("NP","T","P"),col=c("red","blue","black"),lty=1)
 
-apply(crcoefresult,2,mean)
-apply(FTcoefresult,2,mean)
+cbind(crcoef_s,apply(crcoefresult,2,mean))
+cbind(FTcoef_s,apply(FTcoefresult,2,mean))
